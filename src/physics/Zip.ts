@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { GAME } from '../state';
 import type { CityData } from '../city/CityGenerator';
-import { raycastAABBs } from './collision';
+import { raycastAABBs, type AABB } from './collision';
+import { findLedge, type Ledge } from './Ledge';
 import { PlayerBody } from './PlayerBody';
 
 export type ZipKind = 'perch' | 'surface';
@@ -11,6 +12,7 @@ export interface ZipTarget {
   normal: THREE.Vector3 | null;
   kind: ZipKind;
   distance: number;
+  ledge?: Ledge;
 }
 
 export function zipSpeedForCharge(charge: number): number {
@@ -69,14 +71,17 @@ export class Zip {
   private speed: number = GAME.zipSpeed;
   private readonly travel = new THREE.Vector3();
   private readonly look = new THREE.Vector3();
+  private readonly approach = new THREE.Vector3();
+  private readonly landing = new THREE.Vector3();
+  private readonly displacement = new THREE.Vector3();
+  private approaching = false;
 
-  /** Perch inside the zip-to-point range wins; otherwise a building surface inside web-zip range. */
-  aim(origin: THREE.Vector3, direction: THREE.Vector3, city: CityData): ZipTarget | null {
+  aim(origin: THREE.Vector3, direction: THREE.Vector3, city: CityData, allowLedge = true): ZipTarget | null {
     this.look.copy(direction).normalize();
-    const perch = findPerch(origin, this.look, city.perches);
-    if (perch) return perch;
+    const ledge = allowLedge ? findLedge(origin, this.look, city.buildings) : null;
+    if (ledge) return { ...ledge, normal: ledge.ledge.normal, kind: 'perch' };
     const hit = raycastAABBs(origin, this.look, city.buildings, GAME.webZipRange);
-    if (hit) return { point: hit.point, normal: hit.normal, kind: 'surface', distance: hit.distance };
+    if (hit) return { point: hit.point.clone(), normal: hit.normal.clone(), kind: 'surface', distance: hit.distance };
     return null;
   }
 
@@ -85,27 +90,51 @@ export class Zip {
     if (target.kind !== 'perch') return false;
     if (player.position.distanceTo(target.point) > GAME.zipRange) return false;
     this.target.copy(target.point);
+    this.landing.copy(target.point);
+    this.landing.y += GAME.playerRadius;
+    this.approach.copy(this.landing);
+    this.approaching = target.ledge !== undefined;
+    if (target.ledge) {
+      this.landing.addScaledVector(target.ledge.normal, -(GAME.playerRadius + 0.15));
+      this.approach.addScaledVector(target.ledge.normal, GAME.playerRadius + 0.1);
+      this.approach.y += 0.1;
+    }
     this.speed = speed;
+    this.arrivalVelocity.copy(this.approach).sub(player.position).normalize().multiplyScalar(speed);
+    player.grounded = false;
     this.active = true;
     return true;
   }
 
   /** Returns true on the step the player mounts the perch. */
-  step(dt: number, player: PlayerBody): boolean {
+  step(dt: number, player: PlayerBody, buildings: AABB[] = []): boolean {
     if (!this.active) return false;
-    this.travel.copy(this.target).sub(player.position);
-    const distance = this.travel.length();
-    if (distance < Math.max(1.2, this.speed * dt * 1.5)) {
-      this.arrivalVelocity.copy(player.velocity);
-      player.position.copy(this.target);
-      player.position.y += 0.7;
+    let remaining = this.speed * dt;
+    for (let segment = 0; segment < 2; segment += 1) {
+      const destination = this.approaching ? this.approach : this.landing;
+      this.travel.copy(destination).sub(player.position);
+      const distance = this.travel.length();
+      const advance = Math.min(remaining, distance);
+      this.travel.normalize();
+      player.velocity.copy(this.travel).multiplyScalar(this.speed);
+      this.displacement.copy(this.travel).multiplyScalar(advance);
+      player.move(this.displacement, buildings);
+      const distanceLeft = player.position.distanceTo(destination);
+      if (distanceLeft > distance - advance + 0.01) {
+        this.cancel();
+        return false;
+      }
+      if (distanceLeft > 1e-5) return false;
+      remaining -= advance;
+      if (this.approaching) {
+        this.approaching = false;
+        continue;
+      }
       player.velocity.set(0, 0, 0);
       player.grounded = true;
       this.active = false;
       return true;
     }
-    player.velocity.copy(this.travel.normalize().multiplyScalar(this.speed));
-    player.position.addScaledVector(player.velocity, dt);
     return false;
   }
 

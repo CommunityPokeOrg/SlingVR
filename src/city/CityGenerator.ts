@@ -20,7 +20,6 @@ export class CityGenerator {
   readonly group = new THREE.Group();
   readonly data: CityData = { buildings: [], perches: [], spawn: new THREE.Vector3(0, 8, 12) };
   private readonly buildingMesh: THREE.InstancedMesh;
-  private readonly perchMesh: THREE.InstancedMesh;
 
   constructor(seed = 1337) {
     const random = mulberry32(seed);
@@ -72,21 +71,6 @@ export class CityGenerator {
     this.buildingMesh.count = instance;
     this.buildingMesh.instanceColor?.setUsage(THREE.StaticDrawUsage);
     this.group.add(this.buildingMesh);
-
-    const perchGeometry = new THREE.BoxGeometry(1.4, 3.2, 1.4);
-    this.perchMesh = new THREE.InstancedMesh(
-      perchGeometry,
-      new THREE.MeshBasicMaterial({ color: '#4ff2ff', toneMapped: false }),
-      this.data.perches.length,
-    );
-    for (let index = 0; index < this.data.perches.length; index += 1) {
-      const perch = this.data.perches[index];
-      if (perch) {
-        matrix.makeTranslation(perch.x, perch.y, perch.z);
-        this.perchMesh.setMatrixAt(index, matrix);
-      }
-    }
-    this.group.add(this.perchMesh);
 
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(total + 80, total + 80),
