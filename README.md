@@ -22,6 +22,17 @@ SlingVR is a compact WebXR traversal playground inspired by superhero swinging g
 | Wall run / dash | Hold Shift / tap Shift | Thumbstick + jump |
 | Reset / help / debug | R / H / F | â€” |
 
+### XR controls
+
+| Input | Action |
+| --- | --- |
+| Left/right trigger | Shoot and hold the corresponding web |
+| Left/right grip | Zip toward that controller's ray |
+| Left stick | Steer in head-relative space |
+| Right stick Y | Wall-run vertical direction; push forward to run |
+| A/X | Jump when grounded, release webs while airborne |
+| B/Y | Air dash along head-forward |
+
 ## Local development
 
 ```bash
@@ -41,16 +52,16 @@ Pushes to `main` run the GitHub Actions Pages workflow. In repository Settings â
 
 | Area | Files |
 | --- | --- |
-| Bootstrap | `src/main.ts`, `src/state.ts` |
+| Bootstrap | `src/main.ts`, `src/state.ts`, `src/Player.ts` |
 | City | `src/city/CityGenerator.ts` |
 | Physics | `src/physics/PlayerBody.ts`, `Web.ts`, `Zip.ts`, `WallRun.ts`, `AirTricks.ts`, `collision.ts` |
-| Input | `src/input/DesktopInput.ts`, `XRInput.ts` |
+| Input | `src/input/DesktopInput.ts`, `XRInput.ts` (thin adapters over the shared `Player`) |
 | Rendering/UI | `src/render/*`, `src/ui/Hud.ts`, `index.html` |
 | Tests | `src/physics/__tests__/rope.test.ts` |
 
 ## Limitations and future work
 
-This is a deliberately small prototype: it uses custom physics rather than a physics engine, box-only city geometry, no hand tracking, audio, animation/IK, or MSM2 assets, and performance has not been tuned on a standalone Quest. Future experiments could add corner unwrap/multi-segment ropes, loop-de-loops, web wings, better comfort vignettes, richer city materials, and haptics.
+This is a deliberately small prototype: it uses custom physics rather than a physics engine, box-only city geometry, no hand tracking, audio, animation/IK, or MSM2 assets, and performance has not been tuned on a standalone Quest. VR play should use a comfort vignette in a future pass; this prototype intentionally keeps the camera free of a vignette. Future experiments could add corner unwrap/multi-segment ropes, loop-de-loops, web wings, better comfort options, richer city materials, and haptics.
 
 ## License
 

@@ -38,6 +38,7 @@ Loop-de-loops and more elaborate slingshot routes are intentionally future work.
 
 | Mechanic | Implementation | Simplification |
 | --- | --- | --- |
+| Shared player traversal | `Player.ts` | One player owns body, webs, zip, wall run, tricks, visuals, and HUD |
 | Pendulum swing | `physics/Web.ts` | One point mass, one or two independent webs |
 | Reel-in | `Web.step` | Constant reel speed while held |
 | Corner tether | `Web.step` | One first-hit bend, no unwrap |
@@ -46,6 +47,8 @@ Loop-de-loops and more elaborate slingshot routes are intentionally future work.
 | Wall run | `physics/WallRun.ts` | AABB faces only, no camera banking |
 | Air tricks | `physics/AirTricks.ts` | Dash impulse and cosmetic score |
 | Web Wings | Not implemented | Air dash is a small analogue |
+
+The desktop and XR adapters now only translate device state into `Player.FrameInput` and action calls. In XR, triggers shoot webs, grips zip, the left stick steers relative to the headset, the right stick controls wall-run direction, A/X jumps or releases, and B/Y air-dashes. Controller rays are represented by simple procedural meshes; no controller model assets are used.
 
 ## VR-specific considerations
 
