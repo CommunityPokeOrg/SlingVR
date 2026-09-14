@@ -58,12 +58,17 @@ describe('XR controller input', () => {
     const { player, input, controllers, rightSource, leftSource } = setup();
     input.prepareFrame();
     controllers[0].dispatchEvent({ type: 'selectstart', data: rightSource });
-    expect(player.rightWeb.attached).toBe(true);
+    expect(player.rightWeb.shot.flying).toBe(true);
+    expect(player.rightWeb.attached).toBe(false);
     expect(player.leftWeb.attached).toBe(false);
+    expect(player.leftWeb.shot.flying).toBe(false);
     expect(player.zip.active).toBe(false);
     expect(input.getVisualInputs().dualTarget).not.toBeNull();
     controllers[1].dispatchEvent({ type: 'selectstart', data: leftSource });
     expect(player.zip.active).toBe(true);
+    expect(player.zip.leftShot.flying).toBe(true);
+    expect(player.zip.rightShot.flying).toBe(true);
+    expect(player.rightWeb.shot.flying).toBe(false);
   });
 
   it('does not zip with an untracked second controller and clears disconnected inputs', () => {
@@ -72,9 +77,11 @@ describe('XR controller input', () => {
     expect(input.getVisualInputs().dualTarget).toBeNull();
     controllers[1].dispatchEvent({ type: 'selectstart', data: leftSource });
     expect(player.zip.active).toBe(false);
-    expect(player.leftWeb.attached).toBe(true);
+    expect(player.leftWeb.shot.flying).toBe(true);
+    expect(player.leftWeb.attached).toBe(false);
     controllers[1].dispatchEvent({ type: 'disconnected', data: leftSource });
     expect(player.leftWeb.attached).toBe(false);
+    expect(player.leftWeb.shot.flying).toBe(false);
     controllers[0].visible = true;
     controllers[0].dispatchEvent({ type: 'selectstart', data: rightSource });
     expect(player.zip.active).toBe(false);
@@ -98,5 +105,7 @@ describe('XR controller input', () => {
     expect(player.body.velocity.length()).toBe(0);
     expect(player.zip.active).toBe(false);
     expect(SETTINGS.xrPresenting).toBe(false);
+    expect(player.webZip.active).toBe(false);
+    expect(player.webZip.shot.flying).toBe(false);
   });
 });

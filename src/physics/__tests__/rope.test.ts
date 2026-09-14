@@ -5,20 +5,21 @@ import { Web } from '../Web';
 import { GAME } from '../../state';
 
 describe('web rope physics', () => {
-  it('attaches with a slightly shortened rest length', () => {
+  it('attaches at the current distance without shortening the rope', () => {
     const player = new PlayerBody();
     player.position.set(0, 5, 0);
     const web = new Web();
     web.attach(new THREE.Vector3(0, 10, 0), player);
-    expect(web.restLength).toBeCloseTo(4.2);
+    expect(web.restLength).toBeCloseTo(5);
+    expect(player.position.toArray()).toEqual([0, 5, 0]);
   });
 
   it('corrects an overstretched rope', () => {
     const player = new PlayerBody();
-    player.position.set(0, 0, 0);
+    player.position.set(0, 5, 0);
     const web = new Web();
-    web.attach(new THREE.Vector3(0, 5, 0), player);
-    player.position.set(0, 0, 0);
+    web.attach(new THREE.Vector3(0, 10, 0), player);
+    player.position.set(0, 4, 0);
     web.step(1 / 120, player, []);
     expect(player.position.distanceTo(web.anchor)).toBeLessThanOrEqual(web.restLength + 0.01);
   });
@@ -33,15 +34,22 @@ describe('web rope physics', () => {
     expect(web.restLength).toBeLessThan(before);
   });
 
-  it('clamps reel length and skips assisted boost in spectacular mode', () => {
+  it('limits reel acceleration and minimum length without adding tangential speed', () => {
     const player = new PlayerBody();
     player.position.set(0, 0, 0);
     player.velocity.set(1, 0, 0);
     const web = new Web();
     web.attach(new THREE.Vector3(0, 0, 5), player);
-    web.step(1 / 120, player, [], 100, false);
+    web.step(GAME.fixedStep, player, [], 100, false);
+    expect(web.restLength).toBeGreaterThan(4.99);
+    expect(web.reelSpeed).toBeLessThanOrEqual(GAME.ropeReelAcceleration * GAME.fixedStep);
+    expect(player.velocity.x).toBeCloseTo(1);
+    for (let i = 0; i < 240; i += 1) {
+      const length = web.restLength;
+      web.step(GAME.fixedStep, player, [], 100, false);
+      expect(length - web.restLength).toBeLessThanOrEqual(GAME.ropeMaxReelSpeed * GAME.fixedStep + 1e-6);
+    }
     expect(web.restLength).toBe(2);
-    expect(player.velocity.length()).toBeLessThanOrEqual(1.001);
   });
 
   it('does not tension a slack rope', () => {

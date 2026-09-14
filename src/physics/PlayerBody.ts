@@ -30,10 +30,21 @@ export class PlayerBody {
   }
 
   step(dt: number, buildings: AABB[], force = this.zeroForce): void {
-    this.velocity.addScaledVector(force, dt / GAME.playerMass);
     if (this.grounded) {
-      if (!this.steering) this.applyGroundFriction(dt);
-    } else this.velocity.multiplyScalar(Math.exp(-GAME.airDrag * dt));
+      if (!this.steering) {
+        if (force.x * force.x + force.z * force.z > 1e-6) {
+          const speed = Math.hypot(this.velocity.x, this.velocity.z);
+          const scale = speed > 0 ? Math.max(0, 1 - GAME.groundPullFriction * dt / speed) : 0;
+          this.velocity.x *= scale;
+          this.velocity.z *= scale;
+        } else this.applyGroundFriction(dt);
+      }
+    } else {
+      const drag = Math.exp(-GAME.airDrag * dt);
+      this.velocity.x *= drag;
+      this.velocity.z *= drag;
+    }
+    this.velocity.addScaledVector(force, dt / GAME.playerMass);
     this.steering = false;
     this.velocity.y += GAME.gravity * dt;
     this.velocity.y = Math.max(this.velocity.y, -GAME.terminalVelocity);
@@ -86,11 +97,15 @@ export class PlayerBody {
       this.velocity.z += (targetZ - this.velocity.z) * blend;
       return;
     }
-    const along = this.velocity.x * direction.x + this.velocity.z * direction.z;
-    if (along >= GAME.airControlSpeed) return;
-    const add = Math.min(GAME.airAcceleration * dt, GAME.airControlSpeed - along);
-    this.velocity.x += direction.x * add;
-    this.velocity.z += direction.z * add;
+    const magnitude = Math.hypot(direction.x, direction.z);
+    if (magnitude < 1e-6) return;
+    this.horizontal.set(direction.x / magnitude, 0, direction.z / magnitude);
+    const input = Math.min(1, magnitude);
+    const along = this.velocity.dot(this.horizontal);
+    const speed = GAME.airControlSpeed * input;
+    if (along >= speed) return;
+    const add = Math.min(GAME.airAcceleration * input * dt, speed - along);
+    this.velocity.addScaledVector(this.horizontal, add);
   }
 
   private applyGroundFriction(dt: number): void {

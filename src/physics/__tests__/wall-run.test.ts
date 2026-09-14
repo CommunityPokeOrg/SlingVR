@@ -8,7 +8,7 @@ const buildings = [{ min: new THREE.Vector3(0, 0, -10), max: new THREE.Vector3(1
 const start = new THREE.Vector3(-GAME.playerRadius, GAME.playerRadius, 0);
 
 describe('contact-bound wall running', () => {
-  it('starts from a standstill on the ground only with contact, run, and upward look', () => {
+  it('requires contact and run, with upward look when no horizontal motion is requested', () => {
     const body = new PlayerBody(start);
     const wall = new WallRun();
     body.grounded = true;
@@ -37,7 +37,7 @@ describe('contact-bound wall running', () => {
     expect(body.position.x).toBe(-GAME.playerRadius);
   });
 
-  it('stays on the finite wall at the roof and side edges until jumping', () => {
+  it('stays on the finite wall at the roof and side edges until a crest jump', () => {
     const body = new PlayerBody(start);
     const wall = new WallRun();
     for (let i = 0; i < 600; i += 1) {
@@ -49,8 +49,8 @@ describe('contact-bound wall running', () => {
     expect(body.position.x).toBe(-GAME.playerRadius);
     wall.jumpOff(body);
     expect(wall.active).toBe(false);
-    expect(body.velocity.x).toBeLessThan(0);
-    expect(body.velocity.y).toBe(10);
+    expect(body.velocity.x).toBe(0);
+    expect(body.velocity.y).toBe(GAME.wallCrestLift);
     expect(body.wallNormal.lengthSq()).toBe(0);
   });
 
