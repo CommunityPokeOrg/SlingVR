@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Web } from '../physics/Web';
+import { WebShot } from '../physics/WebShot';
 
 const SEGMENTS = 12;
 const CORE_RADIUS = 0.055;
@@ -27,6 +28,7 @@ export class WebLine {
   private readonly tint = new THREE.Color();
   private readonly baseColor = new THREE.Color('#ffffff');
   private readonly chargeColor = new THREE.Color('#ff9d3d');
+  private readonly flightEnd = new THREE.Vector3();
 
   constructor() {
     const geometry = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
@@ -52,21 +54,38 @@ export class WebLine {
   }
 
   update(origin: THREE.Vector3, web: Web): void {
+    if (web.shot.flying) {
+      this.updateShot(origin, web.shot);
+      return;
+    }
     if (!web.attached) {
       this.hide();
       return;
     }
-    this.updateTarget(origin, web.lineEnd, 0);
+    const freeLength = Math.max(0, web.restLength - web.wrappedLength);
+    const slack = Math.max(0, freeLength - origin.distanceTo(web.lineEnd));
+    const sag = web.tension > 0 ? 0 : Math.min(4, Math.sqrt(slack * Math.max(1, freeLength)) * 0.5);
+    this.updateTarget(origin, web.anchor, 0, 1, sag, web.wrappedLength > 0 ? web.bend : undefined);
   }
 
-  updateTarget(origin: THREE.Vector3, end: THREE.Vector3, charge: number, opacity = 1): void {
+  updateShot(origin: THREE.Vector3, shot: WebShot, charge = 0): void {
+    this.flightEnd.copy(shot.flying ? shot.tip : shot.target);
+    this.updateTarget(origin, this.flightEnd, charge, 1, shot.flying ? 0.2 : 0);
+  }
+
+  updateTarget(origin: THREE.Vector3, end: THREE.Vector3, charge: number, opacity = 1, sag?: number, bend?: THREE.Vector3): void {
     this.group.visible = true;
     const length = origin.distanceTo(end);
-    const sagDepth = Math.min(2.2, length * 0.035);
+    const sagDepth = sag ?? Math.min(2.2, length * 0.035);
+    const bendIndex = bend ? THREE.MathUtils.clamp(Math.round(SEGMENTS * origin.distanceTo(bend) / (origin.distanceTo(bend) + bend.distanceTo(end))), 1, SEGMENTS - 1) : SEGMENTS;
     for (let index = 0; index <= SEGMENTS; index += 1) {
-      const t = index / SEGMENTS;
-      this.points[index]!.lerpVectors(origin, end, t);
-      this.points[index]!.y -= Math.sin(Math.PI * t) * sagDepth;
+      if (bend && index > bendIndex) {
+        this.points[index]!.lerpVectors(bend, end, (index - bendIndex) / (SEGMENTS - bendIndex));
+      } else {
+        const t = index / bendIndex;
+        this.points[index]!.lerpVectors(origin, bend ?? end, t);
+        this.points[index]!.y -= Math.sin(Math.PI * t) * sagDepth;
+      }
     }
     for (let index = 0; index < SEGMENTS; index += 1) {
       const from = this.points[index]!;

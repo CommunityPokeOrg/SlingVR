@@ -34,10 +34,12 @@ export class XRInput {
   private readonly aimDirection = new THREE.Vector3();
   private readonly steer = new THREE.Vector3();
   private readonly headForward = new THREE.Vector3();
+  private readonly headLook = new THREE.Vector3();
   private readonly headRight = new THREE.Vector3();
   private readonly cameraQuaternion = new THREE.Quaternion();
   private readonly frameInput: FrameInput = {
     steer: this.steer,
+    look: this.headLook,
     head: this.head,
     leftHand: this.hands[0],
     rightHand: this.hands[1],
@@ -123,6 +125,7 @@ export class XRInput {
     this.updateHandVelocity(1, dt);
     this.camera.getWorldQuaternion(this.cameraQuaternion);
     this.headForward.set(0, 0, -1).applyQuaternion(this.cameraQuaternion);
+    this.headLook.copy(this.headForward);
     this.frameInput.wallAlong = Math.max(0, this.headForward.y);
     this.headForward.y = 0;
     if (this.headForward.lengthSq() > 0) this.headForward.normalize();
@@ -213,7 +216,8 @@ export class XRInput {
   private zip(side: Side): void {
     if (!this.active || !this.controllerRay(side, this.aimOrigin, this.aimDirection)) return;
     this.camera.getWorldPosition(this.head);
-    this.player.zipToward(this.aimOrigin, this.aimDirection, this.aimOrigin, side, true, this.head);
+    this.controllerPosition(side === 'left' ? 'right' : 'left', this.relativeHand);
+    this.player.zipToward(this.aimOrigin, this.aimDirection, this.aimOrigin, side, true, this.head, this.relativeHand);
   }
 
   private controllerPosition(side: Side, target: THREE.Vector3): void {
@@ -264,7 +268,7 @@ export class XRInput {
 
   private handleButtonEdges(left: Gamepad | undefined, right: Gamepad | undefined, spectacular: boolean): void {
     const jumpPressed = (left?.buttons[4]?.pressed ?? false) || (right?.buttons[4]?.pressed ?? false);
-    if (jumpPressed && !this.buttonHeld[0]) this.player.jumpOrRelease();
+    if (jumpPressed && !this.buttonHeld[0]) this.player.jumpOrRelease(this.headLook);
     this.buttonHeld[0] = jumpPressed;
     const dashPressed = (left?.buttons[5]?.pressed ?? false) || (right?.buttons[5]?.pressed ?? false);
     if (!spectacular && dashPressed && !this.buttonHeld[1]) this.player.dash(this.headForward);
