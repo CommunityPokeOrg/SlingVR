@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { WebGLRenderer } from 'three';
 import { Player, type FrameInput } from '../Player';
+import { SETTINGS, toggleMode } from '../settings';
 import { GAME } from '../state';
 
 interface VisualInputs {
@@ -18,16 +19,31 @@ export class XRInput {
   private readonly rig = new THREE.Group();
   private readonly controllers: THREE.Group[] = [];
   private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
+  private readonly previousHands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
+  private readonly handVelocity: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
+  private readonly smoothedVelocity: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly aimOrigin = new THREE.Vector3();
   private readonly aimDirection = new THREE.Vector3();
   private readonly steer = new THREE.Vector3();
   private readonly headForward = new THREE.Vector3();
   private readonly headRight = new THREE.Vector3();
-  private readonly frameInput: FrameInput = { steer: this.steer, runHeld: false, wallAlong: 0, reelLeft: false, reelRight: false };
-  private buttonHeld = false;
-  private dashHeld = false;
+  private readonly cameraQuaternion = new THREE.Quaternion();
+  private readonly frameInput: FrameInput = {
+    steer: this.steer,
+    head: this.aimOrigin,
+    leftHand: this.hands[0],
+    rightHand: this.hands[1],
+    runHeld: false,
+    wallAlong: 0,
+    leftReel: 0,
+    rightReel: 0,
+    turn: 0,
+  };
   private readonly controllerQuaternions: [THREE.Quaternion, THREE.Quaternion] = [new THREE.Quaternion(), new THREE.Quaternion()];
+  private readonly buttonHeld: [boolean, boolean] = [false, false];
+  private leftStickClickHeld = false;
   private active = false;
+  private previousTime = performance.now();
 
   constructor(renderer: WebGLRenderer, camera: THREE.Camera, player: Player, scene: THREE.Scene) {
     this.renderer = renderer;
@@ -45,6 +61,7 @@ export class XRInput {
       controller.addEventListener('selectstart', () => this.shoot(side));
       controller.addEventListener('selectend', () => this.player.releaseWeb(side));
       controller.addEventListener('squeezestart', () => this.zip(index));
+      controller.addEventListener('squeezeend', () => this.player.releaseZip());
       this.addControllerVisual(controller);
       this.rig.add(controller);
     }
@@ -59,29 +76,48 @@ export class XRInput {
       if (source.handedness === 'left') leftGamepad = source.gamepad;
       if (source.handedness === 'right') rightGamepad = source.gamepad;
     }
-    const leftX = this.axis(leftGamepad, 2, 0);
-    const leftY = this.axis(leftGamepad, 3, 1);
-    this.steer.set(leftX, 0, leftY);
-    this.headForward.set(0, 0, -1).applyQuaternion(this.camera.getWorldQuaternion(this.controllerQuaternions[0]));
+    const now = performance.now();
+    const dt = Math.max(1 / 240, Math.min(0.1, (now - this.previousTime) / 1000));
+    this.previousTime = now;
+    this.controllerPosition(0, this.hands[0]);
+    this.controllerPosition(1, this.hands[1]);
+    this.updateHandVelocity(0, dt);
+    this.updateHandVelocity(1, dt);
+    this.camera.getWorldQuaternion(this.cameraQuaternion);
+    this.headForward.set(0, 0, -1).applyQuaternion(this.cameraQuaternion);
     this.headForward.y = 0;
     if (this.headForward.lengthSq() > 0) this.headForward.normalize();
     this.headRight.set(-this.headForward.z, 0, this.headForward.x);
-    const localX = this.steer.x;
-    const localZ = this.steer.z;
-    this.steer.copy(this.headRight).multiplyScalar(localX).addScaledVector(this.headForward, -localZ);
+    const leftX = this.axis(leftGamepad, 2, 0);
+    const leftY = this.axis(leftGamepad, 3, 1);
+    const leftMagnitude = Math.hypot(leftX, leftY);
+    this.steer.copy(this.headRight).multiplyScalar(leftX).addScaledVector(this.headForward, -leftY);
     const rightX = this.axis(rightGamepad, 2, 0);
     const rightY = this.axis(rightGamepad, 3, 1);
     const rightMagnitude = Math.hypot(rightX, rightY);
-    this.frameInput.wallAlong = -rightY;
-    this.frameInput.runHeld = rightY < -0.5 && rightMagnitude > 0.5;
-    this.frameInput.reelLeft = this.triggerValue(leftGamepad) > 0.15;
-    this.frameInput.reelRight = this.triggerValue(rightGamepad) > 0.15;
+    if (SETTINGS.mode === 'friendly') {
+      this.frameInput.wallAlong = -rightY;
+      this.frameInput.runHeld = rightY < -0.5 && rightMagnitude > 0.5;
+      this.frameInput.turn = THREE.MathUtils.clamp(rightX, -1, 1);
+      this.frameInput.leftReel = this.triggerValue(leftGamepad) > 0.15 ? GAME.ropeReelSpeed * GAME.fixedStep : 0;
+      this.frameInput.rightReel = this.triggerValue(rightGamepad) > 0.15 ? GAME.ropeReelSpeed * GAME.fixedStep : 0;
+    } else {
+      this.frameInput.wallAlong = -leftY;
+      this.frameInput.runHeld = leftMagnitude > 0.5;
+      this.frameInput.turn = 0;
+      this.frameInput.leftReel = 0;
+      this.frameInput.rightReel = 0;
+    }
     this.handleButtonEdges(leftGamepad, rightGamepad);
+    if (SETTINGS.mode === 'spectacular') this.checkPunches();
+    else this.player.setPunchSpeed(0);
     return this.frameInput;
   }
 
-  updateRig(): void {
-    if (this.active) this.rig.position.set(this.player.body.position.x, this.player.body.position.y - GAME.playerRadius, this.player.body.position.z);
+  updateRig(dt: number): void {
+    if (!this.active) return;
+    if (SETTINGS.mode === 'friendly') this.rig.rotation.y += this.frameInput.turn * Math.PI * 0.5 * dt;
+    this.rig.position.set(this.player.body.position.x, this.player.body.position.y - GAME.playerRadius, this.player.body.position.z);
   }
 
   getVisualInputs(): VisualInputs {
@@ -98,6 +134,11 @@ export class XRInput {
     this.rig.add(this.camera);
     this.camera.position.set(0, 0, 0);
     this.camera.rotation.set(0, 0, 0);
+    this.controllerPosition(0, this.previousHands[0]);
+    this.controllerPosition(1, this.previousHands[1]);
+    this.smoothedVelocity[0].set(0, 0, 0);
+    this.smoothedVelocity[1].set(0, 0, 0);
+    this.previousTime = performance.now();
   };
 
   private readonly onSessionEnd = (): void => {
@@ -115,7 +156,8 @@ export class XRInput {
 
   private zip(index: number): void {
     this.controllerRay(index, this.aimOrigin, this.aimDirection);
-    this.player.zipToward(this.aimOrigin, this.aimDirection);
+    const side = index === 0 ? 'left' : 'right';
+    this.player.zipToward(this.aimOrigin, this.aimDirection, this.hands[index] ?? this.aimOrigin, side, true);
   }
 
   private controllerPosition(index: number, target: THREE.Vector3): void {
@@ -126,7 +168,7 @@ export class XRInput {
     const controller = this.controllers[index];
     if (!controller) return;
     controller.getWorldPosition(origin);
-    direction.set(0, 0, -1).applyQuaternion(controller.getWorldQuaternion(this.controllerQuaternions[index] ?? new THREE.Quaternion())).normalize();
+    direction.set(0, 0, -1).applyQuaternion(controller.getWorldQuaternion(this.controllerQuaternions[index] ?? this.controllerQuaternions[0])).normalize();
   }
 
   private addControllerVisual(controller: THREE.Group): void {
@@ -150,10 +192,39 @@ export class XRInput {
 
   private handleButtonEdges(left: Gamepad | undefined, right: Gamepad | undefined): void {
     const jumpPressed = (left?.buttons[4]?.pressed ?? false) || (right?.buttons[4]?.pressed ?? false);
+    if (jumpPressed && !this.buttonHeld[0]) this.player.jumpOrRelease();
+    this.buttonHeld[0] = jumpPressed;
     const dashPressed = (left?.buttons[5]?.pressed ?? false) || (right?.buttons[5]?.pressed ?? false);
-    if (jumpPressed && !this.buttonHeld) this.player.jumpOrRelease();
-    if (dashPressed && !this.dashHeld) this.player.dash(this.headForward);
-    this.buttonHeld = jumpPressed;
-    this.dashHeld = dashPressed;
+    if (SETTINGS.mode === 'friendly' && dashPressed && !this.buttonHeld[1]) this.player.dash(this.headForward);
+    this.buttonHeld[1] = dashPressed;
+    const leftStickClick = left?.buttons[3]?.pressed ?? false;
+    if (leftStickClick && !this.leftStickClickHeld) toggleMode();
+    this.leftStickClickHeld = leftStickClick;
+  }
+
+  private updateHandVelocity(index: number, dt: number): void {
+    const hand = this.hands[index]!;
+    const previous = this.previousHands[index]!;
+    const velocity = this.handVelocity[index]!;
+    const smoothed = this.smoothedVelocity[index]!;
+    velocity.copy(hand).sub(previous).multiplyScalar(1 / dt);
+    smoothed.lerp(velocity, 1 / 3);
+    previous.copy(hand);
+  }
+
+  private checkPunches(): void {
+    let fastest = 0;
+    for (let index = 0; index < 2; index += 1) {
+      const velocity = this.smoothedVelocity[index]!;
+      const speed = velocity.length();
+      fastest = Math.max(fastest, speed);
+      if (speed <= GAME.punchSpeed) continue;
+      const direction = velocity.clone().setY(0);
+      if (direction.lengthSq() === 0) continue;
+      direction.normalize();
+      if (direction.dot(this.headForward) < Math.cos(THREE.MathUtils.degToRad(40))) continue;
+      this.player.dash(direction, true);
+    }
+    this.player.setPunchSpeed(fastest);
   }
 }

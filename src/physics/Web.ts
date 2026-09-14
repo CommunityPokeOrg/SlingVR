@@ -35,9 +35,9 @@ export class Web {
     return this.hasBend ? this.bend : this.anchor;
   }
 
-  step(dt: number, player: PlayerBody, buildings: AABB[], reel = false): void {
+  step(dt: number, player: PlayerBody, buildings: AABB[], reelMetres = 0, assist = true): void {
     if (!this.attached) return;
-    if (reel) this.restLength = Math.max(2, this.restLength - GAME.ropeReelSpeed * dt);
+    this.restLength = Math.max(2, this.restLength - Math.max(0, reelMetres));
     const ropeTarget = this.hasBend ? this.bend : this.anchor;
     this.offset.copy(player.position).sub(ropeTarget);
     const distance = this.offset.length();
@@ -53,7 +53,7 @@ export class Web {
     if (outwardSpeed > 0) player.velocity.addScaledVector(this.radial, -outwardSpeed);
     player.velocity.addScaledVector(this.radial, (this.tension / GAME.playerMass) * dt);
     this.tangent.copy(player.velocity).addScaledVector(this.radial, -player.velocity.dot(this.radial));
-    if (this.tangent.lengthSq() > 0.1) player.velocity.addScaledVector(this.tangent.normalize(), GAME.swingBoost * dt);
+    if (assist && this.tangent.lengthSq() > 0.1) player.velocity.addScaledVector(this.tangent.normalize(), GAME.swingBoost * dt);
 
     if (!this.hasBend) {
       this.ray.copy(player.position).sub(this.anchor);

@@ -4,10 +4,16 @@ import { CityGenerator } from './city/CityGenerator';
 import { Player } from './Player';
 import { DesktopInput } from './input/DesktopInput';
 import { XRInput } from './input/XRInput';
+import { loadMode, SETTINGS, setMode } from './settings';
 import { GAME } from './state';
 
 const viewport = document.querySelector<HTMLDivElement>('#viewport');
 if (!viewport) throw new Error('Viewport missing');
+try {
+  if (typeof localStorage !== 'undefined') SETTINGS.mode = loadMode(localStorage);
+} catch {
+  SETTINGS.mode = 'friendly';
+}
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#3a7bd5');
@@ -53,6 +59,22 @@ camera.rotation.set(0, 0, 0, 'YXZ');
 const desktop = new DesktopInput(player, camera, renderer.domElement);
 const xr = new XRInput(renderer, camera, player, scene);
 const overlay = document.querySelector<HTMLElement>('#start-overlay');
+const friendlyMode = document.querySelector<HTMLButtonElement>('#friendly-mode');
+const spectacularMode = document.querySelector<HTMLButtonElement>('#spectacular-mode');
+const updateModeButtons = (): void => {
+  friendlyMode?.classList.toggle('selected', SETTINGS.mode === 'friendly');
+  spectacularMode?.classList.toggle('selected', SETTINGS.mode === 'spectacular');
+};
+friendlyMode?.addEventListener('click', () => {
+  setMode('friendly');
+  updateModeButtons();
+});
+spectacularMode?.addEventListener('click', () => {
+  setMode('spectacular');
+  updateModeButtons();
+});
+window.addEventListener('slingvr:mode', updateModeButtons);
+updateModeButtons();
 document.querySelector<HTMLButtonElement>('#start-button')?.addEventListener('click', () => {
   overlay?.classList.add('hidden');
   desktop.requestLock();
@@ -64,7 +86,7 @@ renderer.setAnimationLoop((now) => {
   const elapsed = Math.min((now - previous) / 1000, 0.1);
   previous = now;
   accumulator += elapsed;
-  const input = renderer.xr.isPresenting ? xr.prepareFrame() : desktop.getFrameInput();
+  const input = renderer.xr.isPresenting ? xr.prepareFrame() : desktop.getFrameInput(GAME.fixedStep);
   let substeps = 0;
   while (accumulator >= GAME.fixedStep && substeps < GAME.maxSubsteps) {
     player.stepPhysics(GAME.fixedStep, input);
@@ -72,7 +94,7 @@ renderer.setAnimationLoop((now) => {
     substeps += 1;
   }
   if (renderer.xr.isPresenting) {
-    xr.updateRig();
+    xr.updateRig(elapsed);
     const visualInputs = xr.getVisualInputs();
     player.updateVisuals(visualInputs.left, visualInputs.right, visualInputs.aimOrigin, visualInputs.aimDirection);
   } else {

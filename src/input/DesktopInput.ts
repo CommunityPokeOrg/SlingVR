@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Player, type FrameInput } from '../Player';
+import { SETTINGS, toggleMode } from '../settings';
 import { GAME } from '../state';
 
 export class DesktopInput {
@@ -13,10 +14,12 @@ export class DesktopInput {
   private readonly aimDirection = new THREE.Vector3();
   private readonly leftOrigin = new THREE.Vector3();
   private readonly rightOrigin = new THREE.Vector3();
+  private readonly head = new THREE.Vector3();
   private yaw = 0;
   private pitch = 0;
   private leftHeld = false;
   private rightHeld = false;
+  private zipHeld = false;
 
   constructor(player: Player, camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement) {
     this.player = player;
@@ -35,7 +38,9 @@ export class DesktopInput {
     void this.canvas.requestPointerLock().catch(() => undefined);
   }
 
-  getFrameInput(): FrameInput {
+  getFrameInput(dt = GAME.fixedStep): FrameInput {
+    this.updateCamera();
+    this.updateHandOrigins();
     this.forward.set(Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     this.right.set(Math.cos(this.yaw), 0, Math.sin(this.yaw));
     this.steer.set(0, 0, 0);
@@ -46,10 +51,14 @@ export class DesktopInput {
     if (this.steer.lengthSq() > 0) this.steer.normalize();
     return {
       steer: this.steer,
+      head: this.head,
+      leftHand: this.leftOrigin,
+      rightHand: this.rightOrigin,
       runHeld: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
       wallAlong: this.keys.has('KeyW') ? 1 : this.keys.has('KeyS') ? -1 : 0,
-      reelLeft: this.leftHeld,
-      reelRight: this.rightHeld,
+      leftReel: SETTINGS.mode === 'friendly' && this.leftHeld || SETTINGS.mode === 'spectacular' && this.keys.has('KeyW') ? GAME.ropeReelSpeed * dt : 0,
+      rightReel: SETTINGS.mode === 'friendly' && this.rightHeld || SETTINGS.mode === 'spectacular' && this.keys.has('KeyW') ? GAME.ropeReelSpeed * dt : 0,
+      turn: 0,
     };
   }
 
@@ -61,9 +70,8 @@ export class DesktopInput {
 
   getVisualInputs(): { left: THREE.Vector3; right: THREE.Vector3; aimOrigin: THREE.Vector3; aimDirection: THREE.Vector3 } {
     this.updateCamera();
+    this.updateHandOrigins();
     this.aimDirection.set(0, 0, -1).applyEuler(this.camera.rotation).normalize();
-    this.leftOrigin.set(-0.28, -0.16, -0.5).applyEuler(this.camera.rotation).add(this.camera.position);
-    this.rightOrigin.set(0.28, -0.16, -0.5).applyEuler(this.camera.rotation).add(this.camera.position);
     return { left: this.leftOrigin, right: this.rightOrigin, aimOrigin: this.camera.position, aimDirection: this.aimDirection };
   }
 
@@ -78,8 +86,13 @@ export class DesktopInput {
     if (event.code === 'Space') {
       event.preventDefault();
       this.player.jumpOrRelease();
+    } else if (event.code === 'KeyM' && !event.repeat) {
+      toggleMode();
     } else if (event.code === 'KeyE') {
-      this.player.zipToward(this.camera.position, this.getAimDirection());
+      if (!this.zipHeld) {
+        this.updateHandOrigins();
+        this.zipHeld = this.player.zipToward(this.camera.position, this.getAimDirection(), this.rightOrigin, 'right', false);
+      }
     } else if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
       this.player.dash(this.getAimDirection());
     } else if (event.code === 'KeyR') this.player.reset();
@@ -89,12 +102,20 @@ export class DesktopInput {
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
     this.keys.delete(event.code);
+    if (event.code === 'KeyE') {
+      this.zipHeld = false;
+      this.player.releaseZip();
+    }
   };
 
   private readonly onMouseDown = (event: MouseEvent): void => {
     const direction = this.getAimDirection();
     if (event.button === 1) {
-      this.player.zipToward(this.camera.position, direction);
+      if (SETTINGS.mode === 'friendly') this.player.zipToward(this.camera.position, direction);
+      else {
+        this.updateHandOrigins();
+        this.zipHeld = this.player.zipToward(this.camera.position, direction, this.rightOrigin, 'right', false);
+      }
       return;
     }
     if (event.button === 0) this.leftHeld = this.player.shootWeb('left', this.camera.position, direction);
@@ -109,9 +130,19 @@ export class DesktopInput {
       this.rightHeld = false;
       this.player.releaseWeb('right');
     }
+    if (event.button === 1) {
+      this.zipHeld = false;
+      this.player.releaseZip();
+    }
   };
 
   private getAimDirection(): THREE.Vector3 {
     return this.aimDirection.set(0, 0, -1).applyEuler(this.camera.rotation).normalize();
+  }
+
+  private updateHandOrigins(): void {
+    this.head.copy(this.camera.position);
+    this.leftOrigin.set(-0.28, -0.16, -0.5).applyEuler(this.camera.rotation).add(this.camera.position);
+    this.rightOrigin.set(0.28, -0.16, -0.5).applyEuler(this.camera.rotation).add(this.camera.position);
   }
 }

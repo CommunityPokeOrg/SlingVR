@@ -8,23 +8,35 @@ export class WebLine {
   private readonly geometry = new THREE.BufferGeometry();
   private readonly positionAttribute: THREE.BufferAttribute;
   private readonly marker: THREE.Mesh;
+  private readonly lineMaterial: THREE.LineBasicMaterial;
+  private readonly markerMaterial: THREE.MeshBasicMaterial;
+  private readonly tint = new THREE.Color();
+  private readonly chargeColor = new THREE.Color('#ff9d3d');
 
   constructor() {
     this.positionAttribute = new THREE.BufferAttribute(this.positions, 3);
     this.geometry.setAttribute('position', this.positionAttribute);
-    this.line = new THREE.Line(this.geometry, new THREE.LineBasicMaterial({ color: '#f3fbff', transparent: true, opacity: 0.9 }));
+    this.lineMaterial = new THREE.LineBasicMaterial({ color: '#f3fbff', transparent: true, opacity: 0.9 });
+    this.line = new THREE.Line(this.geometry, this.lineMaterial);
+    this.markerMaterial = new THREE.MeshBasicMaterial({ color: '#bdf5ff', toneMapped: false });
     this.marker = new THREE.Mesh(
       new THREE.SphereGeometry(0.14, 8, 8),
-      new THREE.MeshBasicMaterial({ color: '#bdf5ff', toneMapped: false }),
+      this.markerMaterial,
     );
     this.group.add(this.line, this.marker);
     this.group.visible = false;
   }
 
   update(origin: THREE.Vector3, web: Web): void {
-    this.group.visible = web.attached;
-    if (!web.attached) return;
-    const end = web.lineEnd;
+    if (!web.attached) {
+      this.hide();
+      return;
+    }
+    this.updateTarget(origin, web.lineEnd, 0);
+  }
+
+  updateTarget(origin: THREE.Vector3, end: THREE.Vector3, charge: number): void {
+    this.group.visible = true;
     for (let index = 0; index < 8; index += 1) {
       const t = index / 7;
       const sag = Math.sin(Math.PI * t) * Math.min(2.2, origin.distanceTo(end) * 0.035);
@@ -34,5 +46,12 @@ export class WebLine {
     }
     this.positionAttribute.needsUpdate = true;
     this.marker.position.copy(end);
+    this.tint.set('#ffffff').lerp(this.chargeColor, charge);
+    this.lineMaterial.color.copy(this.tint);
+    this.markerMaterial.color.copy(this.tint);
+  }
+
+  hide(): void {
+    this.group.visible = false;
   }
 }

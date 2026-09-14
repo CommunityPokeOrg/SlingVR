@@ -13,12 +13,16 @@
       canvas { display: block; }
       #hud { position: fixed; inset: 0; pointer-events: none; padding: 24px; z-index: 2; }
       .stats { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; font: 600 11px/1.2 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 2px 8px #000; }
+      .mode-badge { padding: 4px 7px; border: 1px solid currentColor; border-radius: 999px; font-size: 9px; }
+      .mode-badge.friendly { color: #63e6ff; }
+      .mode-badge.spectacular { color: #ffb454; }
       .brand { font: 800 19px/1 sans-serif; letter-spacing: -.08em; margin-right: 8px; }
       .brand span, h1 span { color: #63e6ff; }
       .state { color: #68f4be; }
       .stats b { color: #ffd56a; }
       .debug { position: absolute; bottom: 24px; left: 24px; white-space: pre; color: #82b5c8; font: 11px/1.5 ui-monospace, monospace; }
       .help-panel { position: absolute; top: 65px; left: 24px; max-width: 320px; padding: 16px 18px; border: 1px solid #5bc7e744; border-radius: 10px; background: #081322dd; color: #cbe9f2; font: 12px/1.7 ui-monospace, monospace; }
+      .mode-toast { position: absolute; top: 74px; right: 24px; padding: 10px 14px; border: 1px solid #ffb45488; border-radius: 999px; background: #081322dd; color: #ffcf86; font: 700 11px ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
       .hidden { display: none !important; }
       #crosshair { position: fixed; left: 50%; top: 50%; width: 14px; height: 14px; transform: translate(-50%, -50%); border: 1px solid #c8f5ff; border-radius: 50%; opacity: .8; z-index: 3; pointer-events: none; }
       #start-overlay { position: fixed; inset: 0; display: grid; place-items: center; z-index: 4; background: radial-gradient(circle at 50% 45%, rgba(22,64,100,.48), rgba(8,19,34,.55) 68%); backdrop-filter: blur(3px); }
@@ -30,6 +34,10 @@
       button { margin: 18px 0 10px; border: 0; border-radius: 999px; padding: 14px 24px; color: #04121a; background: #6cf0ff; font: 800 12px ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
       button:hover { background: #b1f8ff; transform: translateY(-1px); }
       .hint { color: #6d8a99; font: 11px ui-monospace, monospace; }
+      .mode-picker { display: grid; gap: 8px; margin: 26px 0 8px; }
+      .mode-option { margin: 0; padding: 12px 14px; border: 1px solid #52788a; border-radius: 10px; color: #b7d4df; background: #0d2230aa; font: 700 10px/1.35 ui-monospace, monospace; text-align: left; letter-spacing: .04em; text-transform: none; }
+      .mode-option.selected { border-color: #63e6ff; color: #eafcff; background: #14526a99; box-shadow: 0 0 20px #63e6ff22; }
+      .mode-option.spectacular.selected { border-color: #ffb454; background: #6a421e99; box-shadow: 0 0 20px #ffb45422; }
       .VRButton { z-index: 5 !important; }
     </style>
   </head>
@@ -43,6 +51,10 @@
           <p class="eyebrow">WEBXR TRAVERSAL PLAYGROUND</p>
           <h1>Sling<span>VR</span></h1>
           <p>Find a line. Build momentum. Own the skyline.</p>
+          <div class="mode-picker" role="group" aria-label="Control mode">
+            <button id="friendly-mode" class="mode-option" type="button">FRIENDLY NEIGHBORHOOD<br><small>assisted swinging, guided zip, smooth turn</small></button>
+            <button id="spectacular-mode" class="mode-option spectacular" type="button">SPECTACULAR<br><small>head-only turning, physical web pulls, charged zip</small></button>
+          </div>
           <button id="start-button" type="button">Enter the city</button>
           <p class="hint">Click to capture the mouse · Press H for controls</p>
         </div>

@@ -4,16 +4,31 @@ import type { CityData } from '../city/CityGenerator';
 import { raycastAABBs } from './collision';
 import { PlayerBody } from './PlayerBody';
 
+export interface ZipTarget {
+  point: THREE.Vector3;
+  normal: THREE.Vector3 | null;
+  isPerch: boolean;
+}
+
+export function zipSpeedForCharge(charge: number): number {
+  return THREE.MathUtils.lerp(GAME.zipMinSpeed, GAME.zipMaxSpeed, THREE.MathUtils.clamp(charge, 0, 1));
+}
+
+export function pullCharge(pressHand: THREE.Vector3, hand: THREE.Vector3, dirToTarget: THREE.Vector3): number {
+  return THREE.MathUtils.clamp(pressHand.clone().sub(hand).dot(dirToTarget), 0, GAME.zipPullDistance) / GAME.zipPullDistance;
+}
+
 export class Zip {
   active = false;
   target = new THREE.Vector3();
   targetNormal = new THREE.Vector3(0, 1, 0);
   targetIsPerch = false;
+  private speed: number = GAME.zipSpeed;
   private readonly travel = new THREE.Vector3();
   private readonly look = new THREE.Vector3();
   private readonly offset = new THREE.Vector3();
 
-  launch(origin: THREE.Vector3, direction: THREE.Vector3, city: CityData): boolean {
+  aim(origin: THREE.Vector3, direction: THREE.Vector3, city: CityData): ZipTarget | null {
     this.look.copy(direction).normalize();
     let best: THREE.Vector3 | null = null;
     let bestDistance: number = GAME.zipRange;
@@ -28,18 +43,18 @@ export class Zip {
       }
     }
     const hit = raycastAABBs(origin, this.look, city.buildings, GAME.zipRange);
-    if (best) {
-      this.target.copy(best);
-      this.targetNormal.set(0, 1, 0);
-      this.targetIsPerch = true;
-    } else if (hit) {
-      this.target.copy(hit.point);
-      this.targetNormal.copy(hit.normal);
-      this.targetIsPerch = false;
-    }
-    else return false;
+    if (best) return { point: best, normal: null, isPerch: true };
+    if (hit) return { point: hit.point, normal: hit.normal, isPerch: false };
+    return null;
+  }
+
+  launch(target: ZipTarget, speed: number = GAME.zipSpeed): void {
+    this.target.copy(target.point);
+    if (target.normal) this.targetNormal.copy(target.normal);
+    else this.targetNormal.set(0, 1, 0);
+    this.targetIsPerch = target.isPerch;
+    this.speed = speed;
     this.active = true;
-    return true;
   }
 
   step(dt: number, player: PlayerBody): boolean {
@@ -60,7 +75,7 @@ export class Zip {
       this.active = false;
       return true;
     }
-    player.velocity.copy(this.travel.normalize().multiplyScalar(GAME.zipSpeed));
+    player.velocity.copy(this.travel.normalize().multiplyScalar(this.speed));
     player.position.addScaledVector(player.velocity, dt);
     return false;
   }
