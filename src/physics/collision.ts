@@ -12,15 +12,13 @@ export interface RayHit {
   buildingIndex: number;
 }
 
-const tMin = new THREE.Vector3();
-const tMax = new THREE.Vector3();
-const inverse = new THREE.Vector3();
 const rayPoint = new THREE.Vector3();
 const rayNormal = new THREE.Vector3();
 const rayResult = { point: rayPoint, normal: rayNormal, distance: 0 };
 const nearestRayResult = { point: new THREE.Vector3(), normal: new THREE.Vector3(), distance: 0, buildingIndex: -1 };
 const nearestWallResult = {
   distance: 0,
+  buildingIndex: -1,
   normal: new THREE.Vector3(),
   point: new THREE.Vector3(),
 };
@@ -37,7 +35,7 @@ export function raycastAABBs(
     const box = boxes[index];
     if (!box) continue;
     const hit = raycastAABB(origin, direction, box, maxDistance);
-    if (hit && hit.distance < nearestDistance) {
+    if (hit && hit.distance <= nearestDistance) {
       nearestDistance = hit.distance;
       nearestIndex = index;
       nearestRayResult.point.copy(hit.point);
@@ -56,31 +54,34 @@ export function raycastAABB(
   box: AABB,
   maxDistance: number,
 ): Omit<RayHit, 'buildingIndex'> | null {
-  inverse.set(
-    direction.x === 0 ? Number.POSITIVE_INFINITY : 1 / direction.x,
-    direction.y === 0 ? Number.POSITIVE_INFINITY : 1 / direction.y,
-    direction.z === 0 ? Number.POSITIVE_INFINITY : 1 / direction.z,
-  );
-  tMin.set((box.min.x - origin.x) * inverse.x, (box.min.y - origin.y) * inverse.y, (box.min.z - origin.z) * inverse.z);
-  tMax.set((box.max.x - origin.x) * inverse.x, (box.max.y - origin.y) * inverse.y, (box.max.z - origin.z) * inverse.z);
-  const nearX = Math.min(tMin.x, tMax.x);
-  const nearY = Math.min(tMin.y, tMax.y);
-  const nearZ = Math.min(tMin.z, tMax.z);
-  const farX = Math.max(tMin.x, tMax.x);
-  const farY = Math.max(tMin.y, tMax.y);
-  const farZ = Math.max(tMin.z, tMax.z);
-  const near = Math.max(nearX, nearY, nearZ);
-  const far = Math.min(farX, farY, farZ);
-  if (far < 0 || near > far || near > maxDistance) return null;
+  let near = -Infinity;
+  let far = Infinity;
+  let nearAxis = 0;
+  let nearSign = 0;
+  for (let axis = 0; axis < 3; axis += 1) {
+    const start = origin.getComponent(axis);
+    const speed = direction.getComponent(axis);
+    const min = box.min.getComponent(axis);
+    const max = box.max.getComponent(axis);
+    if (Math.abs(speed) < 1e-10) {
+      if (start < min || start > max) return null;
+      continue;
+    }
+    const first = (min - start) / speed;
+    const last = (max - start) / speed;
+    const entry = Math.min(first, last);
+    if (entry > near) {
+      near = entry;
+      nearAxis = axis;
+      nearSign = speed > 0 ? -1 : 1;
+    }
+    far = Math.min(far, Math.max(first, last));
+  }
+  if (far < 0 || near > far + 1e-8 || near > maxDistance) return null;
+  if (!Number.isFinite(near)) return null;
   const distance = Math.max(0, near);
   rayPoint.copy(origin).addScaledVector(direction, distance);
-  const epsilon = 1e-4;
-  if (Math.abs(rayPoint.x - box.min.x) < epsilon) rayNormal.set(-1, 0, 0);
-  else if (Math.abs(rayPoint.x - box.max.x) < epsilon) rayNormal.set(1, 0, 0);
-  else if (Math.abs(rayPoint.y - box.min.y) < epsilon) rayNormal.set(0, -1, 0);
-  else if (Math.abs(rayPoint.y - box.max.y) < epsilon) rayNormal.set(0, 1, 0);
-  else if (Math.abs(rayPoint.z - box.min.z) < epsilon) rayNormal.set(0, 0, -1);
-  else rayNormal.set(0, 0, 1);
+  rayNormal.set(0, 0, 0).setComponent(nearAxis, nearSign);
   rayResult.distance = distance;
   return rayResult;
 }
@@ -89,38 +90,44 @@ export function nearestWall(
   position: THREE.Vector3,
   boxes: AABB[],
   maxDistance: number,
-): { distance: number; normal: THREE.Vector3; point: THREE.Vector3 } | null {
+): { distance: number; normal: THREE.Vector3; point: THREE.Vector3; buildingIndex: number } | null {
   let closestDistance = maxDistance;
   let found = false;
-  for (const box of boxes) {
+  for (const [buildingIndex, box] of boxes.entries()) {
     const insideY = position.y >= box.min.y && position.y <= box.max.y;
     if (!insideY) continue;
-    const minXDistance = Math.abs(position.x - box.min.x);
-    if (minXDistance < closestDistance) {
+    const insideX = position.x >= box.min.x && position.x <= box.max.x;
+    const insideZ = position.z >= box.min.z && position.z <= box.max.z;
+    const minXDistance = box.min.x - position.x;
+    if (insideZ && minXDistance >= 0 && minXDistance <= closestDistance) {
       closestDistance = minXDistance;
       nearestWallResult.normal.set(-1, 0, 0);
       nearestWallResult.point.set(box.min.x, position.y, position.z);
+      nearestWallResult.buildingIndex = buildingIndex;
       found = true;
     }
-    const maxXDistance = Math.abs(position.x - box.max.x);
-    if (maxXDistance < closestDistance) {
+    const maxXDistance = position.x - box.max.x;
+    if (insideZ && maxXDistance >= 0 && maxXDistance <= closestDistance) {
       closestDistance = maxXDistance;
       nearestWallResult.normal.set(1, 0, 0);
       nearestWallResult.point.set(box.max.x, position.y, position.z);
+      nearestWallResult.buildingIndex = buildingIndex;
       found = true;
     }
-    const minZDistance = Math.abs(position.z - box.min.z);
-    if (minZDistance < closestDistance) {
+    const minZDistance = box.min.z - position.z;
+    if (insideX && minZDistance >= 0 && minZDistance <= closestDistance) {
       closestDistance = minZDistance;
       nearestWallResult.normal.set(0, 0, -1);
       nearestWallResult.point.set(position.x, position.y, box.min.z);
+      nearestWallResult.buildingIndex = buildingIndex;
       found = true;
     }
-    const maxZDistance = Math.abs(position.z - box.max.z);
-    if (maxZDistance < closestDistance) {
+    const maxZDistance = position.z - box.max.z;
+    if (insideX && maxZDistance >= 0 && maxZDistance <= closestDistance) {
       closestDistance = maxZDistance;
       nearestWallResult.normal.set(0, 0, 1);
       nearestWallResult.point.set(position.x, position.y, box.max.z);
+      nearestWallResult.buildingIndex = buildingIndex;
       found = true;
     }
   }

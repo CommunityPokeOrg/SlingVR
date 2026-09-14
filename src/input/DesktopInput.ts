@@ -52,8 +52,8 @@ export class DesktopInput {
   getFrameInput(dt = GAME.fixedStep): FrameInput {
     this.updateCamera();
     this.updateHandOrigins();
-    this.forward.set(Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    this.right.set(Math.cos(this.yaw), 0, Math.sin(this.yaw));
+    this.forward.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+    this.right.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     this.steer.set(0, 0, 0);
     if (this.keys.has('KeyW')) this.steer.add(this.forward);
     if (this.keys.has('KeyS')) this.steer.addScaledVector(this.forward, -1);
@@ -67,7 +67,7 @@ export class DesktopInput {
       leftHand: this.leftOrigin,
       rightHand: this.rightOrigin,
       runHeld: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
-      wallAlong: this.keys.has('KeyW') ? 1 : this.keys.has('KeyS') ? -1 : 0,
+      wallAlong: Math.max(0, this.getAimDirection().y),
       leftReel: this.leftHeld ? reel : 0,
       rightReel: this.rightHeld ? reel : 0,
       turn: 0,
@@ -93,6 +93,7 @@ export class DesktopInput {
   };
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
+    if (!this.locked) return;
     this.keys.add(event.code);
     if (event.code === 'Space') event.preventDefault();
     if (event.repeat) return;

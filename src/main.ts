@@ -90,7 +90,7 @@ let previous = performance.now();
 renderer.setAnimationLoop((now) => {
   const elapsed = Math.min((now - previous) / 1000, 0.1);
   previous = now;
-  accumulator += elapsed;
+  accumulator = Math.min(accumulator + elapsed, GAME.fixedStep * GAME.maxSubsteps);
   const input = renderer.xr.isPresenting ? xr.prepareFrame() : desktop.getFrameInput(GAME.fixedStep);
   let substeps = 0;
   while (accumulator >= GAME.fixedStep && substeps < GAME.maxSubsteps) {
@@ -101,7 +101,7 @@ renderer.setAnimationLoop((now) => {
   if (renderer.xr.isPresenting) {
     xr.updateRig(elapsed);
     const visualInputs = xr.getVisualInputs();
-    player.updateVisuals(visualInputs.left, visualInputs.right, visualInputs.aimOrigin, visualInputs.aimDirection);
+    player.updateVisuals(visualInputs.left, visualInputs.right, visualInputs.aimOrigin, visualInputs.aimDirection, visualInputs.dualTarget);
   } else {
     desktop.updateCamera();
     const visualInputs = desktop.getVisualInputs();
