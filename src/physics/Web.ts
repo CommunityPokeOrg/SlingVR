@@ -15,6 +15,7 @@ export class Web {
   private readonly radial = new THREE.Vector3();
   private readonly tangent = new THREE.Vector3();
   private readonly ray = new THREE.Vector3();
+  private readonly closestPoint = new THREE.Vector3();
 
   attach(anchor: THREE.Vector3, player: PlayerBody): void {
     this.anchor.copy(anchor);
@@ -59,13 +60,16 @@ export class Web {
       const distanceToAnchor = this.ray.length();
       if (distanceToAnchor > 1) {
         this.ray.normalize();
-        let closestHit: { point: THREE.Vector3; distance: number } | null = null;
+        let closestDistance = Number.POSITIVE_INFINITY;
         for (const box of buildings) {
           const hit = raycastAABB(this.anchor, this.ray, box, distanceToAnchor - 0.5);
-          if (hit && (!closestHit || hit.distance < closestHit.distance)) closestHit = hit;
+          if (hit && hit.distance < closestDistance) {
+            closestDistance = hit.distance;
+            this.closestPoint.copy(hit.point);
+          }
         }
-        if (closestHit) {
-          this.bend.copy(closestHit.point).addScaledVector(this.ray, -0.15);
+        if (closestDistance < Number.POSITIVE_INFINITY) {
+          this.bend.copy(this.closestPoint).addScaledVector(this.ray, -0.15);
           this.hasBend = true;
         }
       }

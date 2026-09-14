@@ -14,6 +14,11 @@ export interface RayHit {
 
 const tMin = new THREE.Vector3();
 const tMax = new THREE.Vector3();
+const inverse = new THREE.Vector3();
+const rayPoint = new THREE.Vector3();
+const rayNormal = new THREE.Vector3();
+const rayResult = { point: rayPoint, normal: rayNormal, distance: 0 };
+const nearestRayResult = { point: new THREE.Vector3(), normal: new THREE.Vector3(), distance: 0, buildingIndex: -1 };
 const nearestWallResult = {
   distance: 0,
   normal: new THREE.Vector3(),
@@ -26,16 +31,23 @@ export function raycastAABBs(
   boxes: AABB[],
   maxDistance: number,
 ): RayHit | null {
-  let nearest: RayHit | null = null;
+  let nearestDistance = maxDistance;
+  let nearestIndex = -1;
   for (let index = 0; index < boxes.length; index += 1) {
     const box = boxes[index];
     if (!box) continue;
     const hit = raycastAABB(origin, direction, box, maxDistance);
-    if (hit && (!nearest || hit.distance < nearest.distance)) {
-      nearest = { ...hit, buildingIndex: index };
+    if (hit && hit.distance < nearestDistance) {
+      nearestDistance = hit.distance;
+      nearestIndex = index;
+      nearestRayResult.point.copy(hit.point);
+      nearestRayResult.normal.copy(hit.normal);
     }
   }
-  return nearest;
+  if (nearestIndex < 0) return null;
+  nearestRayResult.distance = nearestDistance;
+  nearestRayResult.buildingIndex = nearestIndex;
+  return nearestRayResult;
 }
 
 export function raycastAABB(
@@ -44,7 +56,7 @@ export function raycastAABB(
   box: AABB,
   maxDistance: number,
 ): Omit<RayHit, 'buildingIndex'> | null {
-  const inverse = new THREE.Vector3(
+  inverse.set(
     direction.x === 0 ? Number.POSITIVE_INFINITY : 1 / direction.x,
     direction.y === 0 ? Number.POSITIVE_INFINITY : 1 / direction.y,
     direction.z === 0 ? Number.POSITIVE_INFINITY : 1 / direction.z,
@@ -61,16 +73,16 @@ export function raycastAABB(
   const far = Math.min(farX, farY, farZ);
   if (far < 0 || near > far || near > maxDistance) return null;
   const distance = Math.max(0, near);
-  const point = origin.clone().addScaledVector(direction, distance);
+  rayPoint.copy(origin).addScaledVector(direction, distance);
   const epsilon = 1e-4;
-  const normal = new THREE.Vector3();
-  if (Math.abs(point.x - box.min.x) < epsilon) normal.set(-1, 0, 0);
-  else if (Math.abs(point.x - box.max.x) < epsilon) normal.set(1, 0, 0);
-  else if (Math.abs(point.y - box.min.y) < epsilon) normal.set(0, -1, 0);
-  else if (Math.abs(point.y - box.max.y) < epsilon) normal.set(0, 1, 0);
-  else if (Math.abs(point.z - box.min.z) < epsilon) normal.set(0, 0, -1);
-  else normal.set(0, 0, 1);
-  return { point, normal, distance };
+  if (Math.abs(rayPoint.x - box.min.x) < epsilon) rayNormal.set(-1, 0, 0);
+  else if (Math.abs(rayPoint.x - box.max.x) < epsilon) rayNormal.set(1, 0, 0);
+  else if (Math.abs(rayPoint.y - box.min.y) < epsilon) rayNormal.set(0, -1, 0);
+  else if (Math.abs(rayPoint.y - box.max.y) < epsilon) rayNormal.set(0, 1, 0);
+  else if (Math.abs(rayPoint.z - box.min.z) < epsilon) rayNormal.set(0, 0, -1);
+  else rayNormal.set(0, 0, 1);
+  rayResult.distance = distance;
+  return rayResult;
 }
 
 export function nearestWall(
