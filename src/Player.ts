@@ -20,7 +20,7 @@ export interface FrameInput {
 }
 
 export class Player {
-  readonly body = new PlayerBody();
+  readonly body: PlayerBody;
   readonly leftWeb = new Web();
   readonly rightWeb = new Web();
   readonly zip = new Zip();
@@ -36,6 +36,7 @@ export class Player {
 
   constructor(city: CityData, scene: THREE.Scene) {
     this.city = city;
+    this.body = new PlayerBody(city.spawn);
     this.leftLine = new WebLine();
     this.rightLine = new WebLine();
     this.reticle = new Reticle(scene);

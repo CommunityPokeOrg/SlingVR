@@ -14,7 +14,7 @@ export class DesktopInput {
   private readonly leftOrigin = new THREE.Vector3();
   private readonly rightOrigin = new THREE.Vector3();
   private yaw = 0;
-  private pitch = -0.12;
+  private pitch = 0;
   private leftHeld = false;
   private rightHeld = false;
 

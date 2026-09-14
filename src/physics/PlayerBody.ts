@@ -13,6 +13,11 @@ export class PlayerBody {
   private readonly zeroForce = new THREE.Vector3();
   private readonly spawn = new THREE.Vector3(0, 8, 12);
 
+  constructor(spawn?: THREE.Vector3) {
+    if (spawn) this.spawn.copy(spawn);
+    this.position.copy(this.spawn);
+  }
+
   reset(position = this.spawn): void {
     this.position.copy(position);
     this.velocity.set(0, 0, 0);

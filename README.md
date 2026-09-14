@@ -63,6 +63,8 @@ Pushes to `main` run the GitHub Actions Pages workflow. In repository Settings â
 
 This is a deliberately small prototype: it uses custom physics rather than a physics engine, box-only city geometry, no hand tracking, audio, animation/IK, or MSM2 assets, and performance has not been tuned on a standalone Quest. VR play should use a comfort vignette in a future pass; this prototype intentionally keeps the camera free of a vignette. Future experiments could add corner unwrap/multi-segment ropes, loop-de-loops, web wings, better comfort options, richer city materials, and haptics.
 
+The XR adapter treats `renderer.xr.getController(0)` as the left controller and index `1` as the right controller. Three.js/WebXR does not guarantee that index-to-handedness mapping across runtimes; this prototype uses the fixed convention for its trigger and grip bindings.
+
 ## License
 
 MIT. See [LICENSE](LICENSE). Copyright Â© CommunityPoke contributors.
