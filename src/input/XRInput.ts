@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { WebGLRenderer } from 'three';
-import { Player, type FrameInput } from '../Player';
+import { Player, type FrameInput, type Side } from '../Player';
+import type { ZipTarget } from '../physics/Zip';
 import { effectiveMode, setXrPresenting, toggleMode } from '../settings';
 import { GAME } from '../state';
 
@@ -9,6 +10,7 @@ interface VisualInputs {
   right: THREE.Vector3;
   aimOrigin: THREE.Vector3;
   aimDirection: THREE.Vector3;
+  dualTarget: ZipTarget | null;
 }
 
 export class XRInput {
@@ -18,6 +20,11 @@ export class XRInput {
   private readonly scene: THREE.Scene;
   private readonly rig = new THREE.Group();
   private readonly controllers: THREE.Group[] = [];
+  private readonly sources: (XRInputSource | null)[] = [null, null];
+  private readonly triggerHeld: [boolean, boolean] = [false, false];
+  private readonly motionReady: [boolean, boolean] = [false, false];
+  private readonly directions: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
+  private readonly relativeHand = new THREE.Vector3();
   private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly previousHands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly handVelocity: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
@@ -57,12 +64,41 @@ export class XRInput {
     renderer.xr.addEventListener('sessionend', this.onSessionEnd);
     for (let index = 0; index < 2; index += 1) {
       const controller = renderer.xr.getController(index);
-      const side = index === 0 ? 'left' : 'right';
       this.controllers.push(controller);
-      controller.addEventListener('selectstart', () => this.shoot(side));
-      controller.addEventListener('selectend', () => this.player.releaseWeb(side));
-      controller.addEventListener('squeezestart', () => this.zip(index));
-      controller.addEventListener('squeezeend', () => this.player.releaseZip());
+      controller.addEventListener('connected', (event) => {
+        this.sources[index] = event.data;
+      });
+      controller.addEventListener('disconnected', (event) => {
+        const side = event.data.handedness;
+        if (side === 'left' || side === 'right') {
+          const handIndex = side === 'left' ? 0 : 1;
+          this.triggerHeld[handIndex] = false;
+          this.motionReady[handIndex] = false;
+          this.smoothedVelocity[handIndex].set(0, 0, 0);
+          this.player.releaseWeb(side);
+        }
+        this.player.cancelZipCharge();
+        this.sources[index] = null;
+      });
+      controller.addEventListener('selectstart', (event) => {
+        const side = event.data.handedness;
+        if (side === 'left' || side === 'right') this.shoot(side);
+      });
+      controller.addEventListener('selectend', (event) => {
+        const side = event.data.handedness;
+        if (side === 'left' || side === 'right') {
+          this.triggerHeld[side === 'left' ? 0 : 1] = false;
+          this.player.releaseWeb(side);
+        }
+      });
+      controller.addEventListener('squeezestart', (event) => {
+        const side = event.data.handedness;
+        if (side === 'left' || side === 'right') this.zip(side);
+      });
+      controller.addEventListener('squeezeend', (event) => {
+        const side = event.data.handedness;
+        if (side === 'left' || side === 'right') this.player.releaseZip(side);
+      });
       this.addControllerVisual(controller);
       this.rig.add(controller);
     }
@@ -80,13 +116,14 @@ export class XRInput {
     const now = performance.now();
     const dt = Math.max(1 / 240, Math.min(0.1, (now - this.previousTime) / 1000));
     this.previousTime = now;
-    this.controllerPosition(0, this.hands[0]);
-    this.controllerPosition(1, this.hands[1]);
     this.camera.getWorldPosition(this.head);
+    this.controllerPosition('left', this.hands[0]);
+    this.controllerPosition('right', this.hands[1]);
     this.updateHandVelocity(0, dt);
     this.updateHandVelocity(1, dt);
     this.camera.getWorldQuaternion(this.cameraQuaternion);
     this.headForward.set(0, 0, -1).applyQuaternion(this.cameraQuaternion);
+    this.frameInput.wallAlong = Math.max(0, this.headForward.y);
     this.headForward.y = 0;
     if (this.headForward.lengthSq() > 0) this.headForward.normalize();
     this.headRight.set(-this.headForward.z, 0, this.headForward.x);
@@ -101,14 +138,12 @@ export class XRInput {
     const rightMagnitude = Math.hypot(rightX, rightY);
     const spectacular = effectiveMode() === 'spectacular';
     if (!spectacular) {
-      this.frameInput.wallAlong = -rightY;
       this.frameInput.runHeld = rightY < -0.5 && rightMagnitude > 0.5;
       this.frameInput.turn = THREE.MathUtils.clamp(rightX, -1, 1);
       this.frameInput.leftReel = this.triggerValue(leftGamepad) > 0.15 ? GAME.ropeReelSpeed * GAME.fixedStep : 0;
       this.frameInput.rightReel = this.triggerValue(rightGamepad) > 0.15 ? GAME.ropeReelSpeed * GAME.fixedStep : 0;
     } else {
-      this.frameInput.wallAlong = -leftY;
-      this.frameInput.runHeld = leftMagnitude > 0.5;
+      this.frameInput.runHeld = leftY < -0.5;
       this.frameInput.turn = 0;
       this.frameInput.leftReel = 0;
       this.frameInput.rightReel = 0;
@@ -126,10 +161,11 @@ export class XRInput {
   }
 
   getVisualInputs(): VisualInputs {
-    this.controllerPosition(0, this.hands[0]);
-    this.controllerPosition(1, this.hands[1]);
-    this.controllerRay(0, this.aimOrigin, this.aimDirection);
-    return { left: this.hands[0], right: this.hands[1], aimOrigin: this.aimOrigin, aimDirection: this.aimDirection };
+    const dualTarget = this.updateDualAim();
+    if (!this.controllerRay('right', this.aimOrigin, this.aimDirection)) {
+      this.controllerRay('left', this.aimOrigin, this.aimDirection);
+    }
+    return { left: this.hands[0], right: this.hands[1], aimOrigin: this.aimOrigin, aimDirection: this.aimDirection, dualTarget };
   }
 
   private readonly onSessionStart = (): void => {
@@ -140,8 +176,10 @@ export class XRInput {
     this.rig.add(this.camera);
     this.camera.position.set(0, 0, 0);
     this.camera.rotation.set(0, 0, 0);
-    this.controllerPosition(0, this.previousHands[0]);
-    this.controllerPosition(1, this.previousHands[1]);
+    this.motionReady.fill(false);
+    this.triggerHeld.fill(false);
+    this.buttonHeld.fill(false);
+    this.leftStickClickHeld = false;
     this.smoothedVelocity[0].set(0, 0, 0);
     this.smoothedVelocity[1].set(0, 0, 0);
     this.previousTime = performance.now();
@@ -150,33 +188,59 @@ export class XRInput {
   private readonly onSessionEnd = (): void => {
     this.active = false;
     setXrPresenting(false);
-    this.player.releaseZip();
+    this.player.cancelZipCharge();
+    this.player.releaseWeb('left');
+    this.player.releaseWeb('right');
+    this.triggerHeld.fill(false);
+    this.motionReady.fill(false);
     this.rig.visible = false;
     this.rig.remove(this.camera);
     this.scene.add(this.camera);
   };
 
-  private shoot(side: 'left' | 'right'): void {
+  private shoot(side: Side): void {
+    if (!this.active) return;
     const index = side === 'left' ? 0 : 1;
-    this.controllerRay(index, this.aimOrigin, this.aimDirection);
+    this.triggerHeld[index] = true;
+    if (effectiveMode() === 'spectacular' && this.triggerHeld[0] && this.triggerHeld[1]) {
+      const target = this.updateDualAim();
+      if (target && this.player.zipWithBothHands(this.hands[0], this.directions[0], this.hands[1], this.directions[1])) return;
+    }
+    if (!this.controllerRay(side, this.aimOrigin, this.aimDirection)) return;
     this.player.shootWeb(side, this.aimOrigin, this.aimDirection);
   }
 
-  private zip(index: number): void {
-    this.controllerRay(index, this.aimOrigin, this.aimDirection);
-    const side = index === 0 ? 'left' : 'right';
-    this.player.zipToward(this.aimOrigin, this.aimDirection, this.hands[index] ?? this.aimOrigin, side, true);
+  private zip(side: Side): void {
+    if (!this.active || !this.controllerRay(side, this.aimOrigin, this.aimDirection)) return;
+    this.camera.getWorldPosition(this.head);
+    this.player.zipToward(this.aimOrigin, this.aimDirection, this.aimOrigin, side, true, this.head);
   }
 
-  private controllerPosition(index: number, target: THREE.Vector3): void {
-    this.controllers[index]?.getWorldPosition(target);
-  }
-
-  private controllerRay(index: number, origin: THREE.Vector3, direction: THREE.Vector3): void {
+  private controllerPosition(side: Side, target: THREE.Vector3): void {
+    const index = this.sources.findIndex((source) => source?.handedness === side);
     const controller = this.controllers[index];
-    if (!controller) return;
+    if (controller?.visible) controller.getWorldPosition(target);
+    else target.copy(this.head);
+  }
+
+  private controllerRay(side: Side, origin: THREE.Vector3, direction: THREE.Vector3): boolean {
+    const index = this.sources.findIndex((source) => source?.handedness === side);
+    const controller = this.controllers[index];
+    if (!controller?.visible) {
+      origin.copy(this.head);
+      direction.set(0, 0, 0);
+      return false;
+    }
     controller.getWorldPosition(origin);
     direction.set(0, 0, -1).applyQuaternion(controller.getWorldQuaternion(this.controllerQuaternions[index] ?? this.controllerQuaternions[0])).normalize();
+    return true;
+  }
+
+  private updateDualAim(): ZipTarget | null {
+    const left = this.controllerRay('left', this.hands[0], this.directions[0]);
+    const right = this.controllerRay('right', this.hands[1], this.directions[1]);
+    if (!left || !right || effectiveMode() !== 'spectacular') return null;
+    return this.player.aimDualZip(this.hands[0], this.directions[0], this.hands[1], this.directions[1]);
   }
 
   private addControllerVisual(controller: THREE.Group): void {
@@ -215,9 +279,21 @@ export class XRInput {
     const previous = this.previousHands[index]!;
     const velocity = this.handVelocity[index]!;
     const smoothed = this.smoothedVelocity[index]!;
-    velocity.copy(hand).sub(previous).multiplyScalar(1 / dt);
-    smoothed.lerp(velocity, 1 / 3);
-    previous.copy(hand);
+    const sourceIndex = this.sources.findIndex((source) => source?.handedness === (index === 0 ? 'left' : 'right'));
+    if (!this.controllers[sourceIndex]?.visible) {
+      this.motionReady[index] = false;
+      smoothed.set(0, 0, 0);
+      return;
+    }
+    this.relativeHand.copy(hand).sub(this.head);
+    if (this.motionReady[index]) {
+      velocity.copy(this.relativeHand).sub(previous).multiplyScalar(1 / dt);
+      smoothed.lerp(velocity, 1 - Math.exp(-25 * dt));
+    } else {
+      smoothed.set(0, 0, 0);
+      this.motionReady[index] = true;
+    }
+    previous.copy(this.relativeHand);
   }
 
   private checkPunches(): void {

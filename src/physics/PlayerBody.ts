@@ -12,6 +12,8 @@ export class PlayerBody {
   private readonly delta = new THREE.Vector3();
   private readonly zeroForce = new THREE.Vector3();
   private readonly horizontal = new THREE.Vector3();
+  private readonly displacement = new THREE.Vector3();
+  private readonly moveStep = new THREE.Vector3();
   private readonly spawn = new THREE.Vector3(0, 8, 12);
   private steering = false;
 
@@ -24,24 +26,40 @@ export class PlayerBody {
     this.position.copy(position);
     this.velocity.set(0, 0, 0);
     this.grounded = false;
+    this.wallNormal.set(0, 0, 0);
   }
 
   step(dt: number, buildings: AABB[], force = this.zeroForce): void {
     this.velocity.addScaledVector(force, dt / GAME.playerMass);
     if (this.grounded) {
       if (!this.steering) this.applyGroundFriction(dt);
-    } else this.velocity.multiplyScalar(Math.max(0, 1 - GAME.airDrag * dt));
+    } else this.velocity.multiplyScalar(Math.exp(-GAME.airDrag * dt));
     this.steering = false;
     this.velocity.y += GAME.gravity * dt;
     this.velocity.y = Math.max(this.velocity.y, -GAME.terminalVelocity);
-    this.nextPosition.copy(this.position).addScaledVector(this.velocity, dt);
+    this.move(this.displacement.copy(this.velocity).multiplyScalar(dt), buildings);
+  }
+
+  move(displacement: THREE.Vector3, buildings: AABB[]): void {
+    const steps = Math.max(1, Math.ceil(displacement.length() / (GAME.playerRadius * 0.5)));
+    this.moveStep.copy(displacement).divideScalar(steps);
+    for (let step = 0; step < steps; step += 1) {
+      this.position.add(this.moveStep);
+      this.resolveCollisions(buildings);
+    }
+  }
+
+  resolveCollisions(buildings: AABB[]): void {
+    this.nextPosition.copy(this.position);
     this.grounded = false;
-    if (this.nextPosition.y < GAME.playerRadius) {
+    if (this.nextPosition.y <= GAME.playerRadius) {
       this.nextPosition.y = GAME.playerRadius;
       if (this.velocity.y < 0) this.velocity.y = 0;
       this.grounded = true;
     }
-    for (const box of buildings) this.resolveAABB(box);
+    for (let pass = 0; pass < 3; pass += 1) {
+      for (const box of buildings) this.resolveAABB(box);
+    }
     this.position.copy(this.nextPosition);
   }
 
@@ -87,7 +105,7 @@ export class PlayerBody {
   }
 
   nearestWall(buildings: AABB[]) {
-    return nearestWall(this.position, buildings, GAME.wallDistance);
+    return nearestWall(this.position, buildings, GAME.playerRadius + GAME.wallContactTolerance);
   }
 
   private resolveAABB(box: AABB): void {
@@ -99,40 +117,38 @@ export class PlayerBody {
     );
     this.delta.copy(this.nextPosition).sub(this.closest);
     const distance = this.delta.length();
-    if (distance >= radius) return;
+    if (distance > radius + 1e-6) return;
     if (distance > 1e-5) {
-      this.delta.multiplyScalar((radius - distance) / distance);
-      this.nextPosition.add(this.delta);
-      if (Math.abs(this.delta.x) > Math.abs(this.delta.y) && Math.abs(this.delta.x) > Math.abs(this.delta.z)) this.velocity.x = 0;
-      else if (Math.abs(this.delta.y) > Math.abs(this.delta.z)) {
-        if (this.delta.y > 0) this.grounded = true;
-        this.velocity.y = 0;
-      } else this.velocity.z = 0;
+      this.delta.divideScalar(distance);
+      this.nextPosition.addScaledVector(this.delta, Math.max(0, radius - distance));
+      const inwardSpeed = this.velocity.dot(this.delta);
+      if (inwardSpeed < 0) this.velocity.addScaledVector(this.delta, -inwardSpeed);
+      if (this.delta.y > 0.7 && this.velocity.y <= 1e-5) this.grounded = true;
       return;
     }
     let bestAmount = this.nextPosition.x - box.min.x + radius;
     let bestAxis = 0;
-    let bestSign = 1;
+    let bestSign = -1;
     let amount = box.max.x - this.nextPosition.x + radius;
-    if (amount < bestAmount) { bestAmount = amount; bestSign = -1; }
+    if (amount < bestAmount) { bestAmount = amount; bestSign = 1; }
     amount = this.nextPosition.y - box.min.y + radius;
-    if (amount < bestAmount) { bestAmount = amount; bestAxis = 1; bestSign = 1; }
-    amount = box.max.y - this.nextPosition.y + radius;
     if (amount < bestAmount) { bestAmount = amount; bestAxis = 1; bestSign = -1; }
+    amount = box.max.y - this.nextPosition.y + radius;
+    if (amount < bestAmount) { bestAmount = amount; bestAxis = 1; bestSign = 1; }
     amount = this.nextPosition.z - box.min.z + radius;
-    if (amount < bestAmount) { bestAmount = amount; bestAxis = 2; bestSign = 1; }
-    amount = box.max.z - this.nextPosition.z + radius;
     if (amount < bestAmount) { bestAmount = amount; bestAxis = 2; bestSign = -1; }
+    amount = box.max.z - this.nextPosition.z + radius;
+    if (amount < bestAmount) { bestAmount = amount; bestAxis = 2; bestSign = 1; }
     if (bestAxis === 0) {
       this.nextPosition.x += bestAmount * bestSign;
-      this.velocity.x = 0;
+      if (this.velocity.x * bestSign < 0) this.velocity.x = 0;
     } else if (bestAxis === 1) {
       this.nextPosition.y += bestAmount * bestSign;
-      this.velocity.y = 0;
+      if (this.velocity.y * bestSign < 0) this.velocity.y = 0;
       this.grounded = bestSign > 0;
     } else {
       this.nextPosition.z += bestAmount * bestSign;
-      this.velocity.z = 0;
+      if (this.velocity.z * bestSign < 0) this.velocity.z = 0;
     }
   }
 }
