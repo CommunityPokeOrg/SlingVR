@@ -3,8 +3,8 @@ import { Web } from '../physics/Web';
 import { WebShot } from '../physics/WebShot';
 
 const SEGMENTS = 12;
-const CORE_RADIUS = 0.055;
-const HALO_RADIUS = 0.11;
+const CORE_RADIUS = 0.008;
+const HALO_RADIUS = 0.018;
 const UP = new THREE.Vector3(0, 1, 0);
 
 /**
@@ -48,7 +48,7 @@ export class WebLine {
     this.halo.renderOrder = 1;
     this.core.renderOrder = 2;
     this.markerMaterial = new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false, fog: false, transparent: true });
-    this.marker = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), this.markerMaterial);
+    this.marker = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 10), this.markerMaterial);
     this.group.add(this.halo, this.core, this.marker);
     this.group.visible = false;
   }
@@ -74,9 +74,13 @@ export class WebLine {
   }
 
   updateTarget(origin: THREE.Vector3, end: THREE.Vector3, charge: number, opacity = 1, sag?: number, bend?: THREE.Vector3): void {
+    const length = bend ? origin.distanceTo(bend) + bend.distanceTo(end) : origin.distanceTo(end);
+    if (length < 1e-4) {
+      this.hide();
+      return;
+    }
     this.group.visible = true;
-    const length = origin.distanceTo(end);
-    const sagDepth = sag ?? Math.min(2.2, length * 0.035);
+    const sagDepth = Math.min(sag ?? Math.min(2.2, length * 0.035), length * 0.25);
     const bendIndex = bend ? THREE.MathUtils.clamp(Math.round(SEGMENTS * origin.distanceTo(bend) / (origin.distanceTo(bend) + bend.distanceTo(end))), 1, SEGMENTS - 1) : SEGMENTS;
     for (let index = 0; index <= SEGMENTS; index += 1) {
       if (bend && index > bendIndex) {
