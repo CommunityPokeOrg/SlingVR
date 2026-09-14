@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#081322" />
+    <title>SlingVR — WebXR traversal playground</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+      * { box-sizing: border-box; }
+      html, body, #app, #viewport { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+      body { background: #081322; color: #eaf7ff; }
+      canvas { display: block; }
+      #hud { position: fixed; inset: 0; pointer-events: none; padding: 24px; z-index: 2; }
+      .stats { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; font: 600 11px/1.2 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 2px 8px #000; }
+      .brand { font: 800 19px/1 sans-serif; letter-spacing: -.08em; margin-right: 8px; }
+      .brand span, h1 span { color: #63e6ff; }
+      .state { color: #68f4be; }
+      .stats b { color: #ffd56a; }
+      .debug { position: absolute; bottom: 24px; left: 24px; white-space: pre; color: #82b5c8; font: 11px/1.5 ui-monospace, monospace; }
+      .help-panel { position: absolute; top: 65px; left: 24px; max-width: 320px; padding: 16px 18px; border: 1px solid #5bc7e744; border-radius: 10px; background: #081322dd; color: #cbe9f2; font: 12px/1.7 ui-monospace, monospace; }
+      .hidden { display: none !important; }
+      #crosshair { position: fixed; left: 50%; top: 50%; width: 14px; height: 14px; transform: translate(-50%, -50%); border: 1px solid #c8f5ff; border-radius: 50%; opacity: .8; z-index: 3; pointer-events: none; }
+      #start-overlay { position: fixed; inset: 0; display: grid; place-items: center; z-index: 4; background: radial-gradient(circle at 50% 45%, #164064cc, #050b14f2 68%); }
+      #start-overlay.hidden { opacity: 0; pointer-events: none; transition: opacity .5s; }
+      .panel { width: min(480px, calc(100% - 48px)); padding: 42px; border: 1px solid #64dfff55; border-radius: 18px; background: #081322d9; box-shadow: 0 18px 80px #0008; text-align: center; }
+      .eyebrow { color: #68e2ff; font: 700 10px/1.2 ui-monospace, monospace; letter-spacing: .2em; }
+      h1 { margin: 14px 0; font-size: clamp(56px, 14vw, 100px); letter-spacing: -.1em; line-height: .85; }
+      .panel p:not(.eyebrow):not(.hint) { color: #a8c7d4; }
+      button { margin: 18px 0 10px; border: 0; border-radius: 999px; padding: 14px 24px; color: #04121a; background: #6cf0ff; font: 800 12px ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+      button:hover { background: #b1f8ff; transform: translateY(-1px); }
+      .hint { color: #6d8a99; font: 11px ui-monospace, monospace; }
+      .VRButton { z-index: 5 !important; }
+    </style>
+  </head>
+  <body>
+    <main id="app">
+      <div id="viewport"></div>
+      <div id="hud" aria-live="polite"></div>
+      <div id="crosshair" aria-hidden="true"></div>
+      <section id="start-overlay">
+        <div class="panel">
+          <p class="eyebrow">WEBXR TRAVERSAL PLAYGROUND</p>
+          <h1>Sling<span>VR</span></h1>
+          <p>Find a line. Build momentum. Own the skyline.</p>
+          <button id="start-button" type="button">Enter the city</button>
+          <p class="hint">Click to capture the mouse · Press H for controls</p>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
