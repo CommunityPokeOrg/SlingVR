@@ -22,6 +22,7 @@ export class XRInput {
   private readonly previousHands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly handVelocity: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly smoothedVelocity: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
+  private readonly head = new THREE.Vector3();
   private readonly aimOrigin = new THREE.Vector3();
   private readonly aimDirection = new THREE.Vector3();
   private readonly steer = new THREE.Vector3();
@@ -30,7 +31,7 @@ export class XRInput {
   private readonly cameraQuaternion = new THREE.Quaternion();
   private readonly frameInput: FrameInput = {
     steer: this.steer,
-    head: this.aimOrigin,
+    head: this.head,
     leftHand: this.hands[0],
     rightHand: this.hands[1],
     runHeld: false,
@@ -81,6 +82,7 @@ export class XRInput {
     this.previousTime = now;
     this.controllerPosition(0, this.hands[0]);
     this.controllerPosition(1, this.hands[1]);
+    this.camera.getWorldPosition(this.head);
     this.updateHandVelocity(0, dt);
     this.updateHandVelocity(1, dt);
     this.camera.getWorldQuaternion(this.cameraQuaternion);
