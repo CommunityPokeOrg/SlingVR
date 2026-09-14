@@ -48,7 +48,20 @@ Loop-de-loops and more elaborate slingshot routes are intentionally future work.
 | Air tricks | `physics/AirTricks.ts` | Dash impulse and cosmetic score |
 | Web Wings | Not implemented | Air dash is a small analogue |
 
-The desktop and XR adapters now only translate device state into `Player.FrameInput` and action calls. In XR, triggers shoot webs, grips zip, the left stick steers relative to the headset, the right stick controls wall-run direction, A/X jumps or releases, and B/Y air-dashes. Controller rays are represented by simple procedural meshes; no controller model assets are used.
+The desktop and XR adapters now only translate device state into `Player.FrameInput` and action calls. In Friendly XR, triggers shoot and reel webs, grips zip immediately, the left stick steers, and the right stick controls wall-run direction and smooth turn. In Spectacular XR, triggers shoot without assistance, physical pulls reel, the left stick steers and wall-runs, grips charge zips, and punches dash. A/X jumps or releases, while B/Y remains the Friendly dash. Controller rays are represented by simple procedural meshes; no controller model assets are used.
+
+## Design notes: two-mode controls
+
+The two control modes separate accessibility from expressiveness. **Friendly Neighborhood**, the default, keeps assisted swinging, guided zips, and smooth turning approachable for new or seated players. **Spectacular** removes those assists so standing players can turn with their bodies, pull webs with their arms, charge a zip, and punch into an air dash. The concept was suggested by **Spacedouut** as a community distinction between comfortable traversal and a mastery-oriented mode.
+
+| Spectacular gesture | MSM2 mechanic it mirrors | SlingVR implementation |
+| --- | --- | --- |
+| Pull a hand back while webbed | Pumping a swing and converting body motion into speed | Compare consecutive `(hand − head) · dirToAnchor` values; only decreases reel the rope, scaled by `pullGain = 1.6` |
+| Pull back while gripping a zip | Charged web zip / point launch timing | Track the maximum pull distance, clamp it to `zipPullDistance = 0.45m`, then map charge to `14–48m/s` |
+| Punch forward | Air dash / Web Wings-like traversal burst | Smooth controller pose velocity over three frames, require `3.2m/s` and a horizontal direction within 40° of head-forward |
+| Turn physically | Expressive VR traversal without a comfort turn assist | Spectacular sets smooth turn to zero and leaves orientation to headset tracking |
+
+Desktop Spectacular uses `W` as a keyboard stand-in for the physical arm pull, and `E`/middle mouse hold time as a fallback for zip charge. These substitutes preserve the timing and tradeoffs without pretending that mouse input is hand tracking.
 
 ## VR-specific considerations
 
