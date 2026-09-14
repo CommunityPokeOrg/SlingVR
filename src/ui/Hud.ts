@@ -48,6 +48,7 @@ export class Hud {
     punchSpeed: number,
     leftReel: number,
     rightReel: number,
+    zipCooldown = 0,
   ): void {
     this.frames += 1;
     const now = performance.now();
@@ -58,7 +59,8 @@ export class Hud {
     }
     const speed = player.velocity.length() * 3.6;
     this.mode = mode;
-    const chargeLabel = charging ? `<span>ZIP ${Math.round(charge * 100)}%</span>` : '';
+    const chargeLabel = charging ? `<span>ZIP ${Math.round(charge * 100)}%</span>`
+      : zipCooldown > 0 ? `<span>WEB ZIP ${zipCooldown.toFixed(1)}s</span>` : '';
     this.root.innerHTML = `<div class="stats"><span class="brand">SLING<span>VR</span></span><span class="mode-badge ${mode}">MODE: ${mode === 'friendly' ? 'FRIENDLY NEIGHBORHOOD' : 'SPECTACULAR'}</span><span>${speed.toFixed(0)} km/h</span><span>${player.position.y.toFixed(0)} m ALT</span><span class="state">${state}</span>${chargeLabel}<span>STYLE ${tricks.style}</span>${tricks.lastTrick ? `<b>${tricks.lastTrick}</b>` : ''}<span>${this.fps} FPS</span></div>`;
     this.root.append(this.help, this.debug, this.toast);
     if (!this.debug.classList.contains('hidden')) {
@@ -82,6 +84,6 @@ export class Hud {
 
   private renderHelp(): void {
     const friendly = this.mode === 'friendly';
-    this.help.innerHTML = `<strong>DESKTOP</strong><br>WASD run · Mouse look · LMB/RMB shoot + reel webs<br>E / MMB zip: green ledge = zip-to-point, yellow wall = web zip<br>Touch wall + look up + hold Shift to climb · Space to leave wall<br>Space jump/release · Space on landing = slingshot · Shift air dash<br>R reset · H help · F debug<br><br><strong>VR · ${friendly ? 'FRIENDLY NEIGHBORHOOD' : 'SPECTACULAR'}</strong><br>Triggers shoot webs · ${friendly ? 'Grip zips · Left stick steers · right stick turns' : 'Aim both hands at one ledge + both triggers to zip<br>Grip + pull back + release for surface zip · Left stick steers · head turns'}<br>Touch wall + look up + ${friendly ? 'right' : 'left'} stick forward to climb · A/X to leave wall<br>A/X jump · ${friendly ? 'B/Y air dash' : 'physical punch air dash'} · Left stick click toggles mode`;
+    this.help.innerHTML = `<strong>DESKTOP</strong><br>WASD run · Mouse look · LMB/RMB shoot + reel webs<br>E / MMB zip: green ledge = zip-to-point, yellow wall = web pull<br>Webs pull only after attaching · Web zip has a cooldown<br>Touch wall + hold Shift: WASD along wall, look up to climb<br>Space: look away / run to leave wall, look up while running to boost<br>Jump near the roof while moving to clear the lip<br>Space jump/release · Space on landing = slingshot · Shift air dash<br>R reset · H help · F debug<br><br><strong>VR · ${friendly ? 'FRIENDLY NEIGHBORHOOD' : 'SPECTACULAR'}</strong><br>Triggers shoot webs · ${friendly ? 'Grip zips · Left stick steers · right stick turns' : 'Aim both hands at one ledge + both triggers to zip<br>Grip + pull back + release for surface zip · Left stick steers · head turns'}<br>Touch wall + ${friendly ? 'right' : 'left'} stick forward to run · Left stick steers along wall<br>Look up to climb · A/X: away jump, upward boost, or roof clearance<br>${friendly ? 'B/Y air dash' : 'Physical punch air dash'} · Left stick click toggles mode`;
   }
 }

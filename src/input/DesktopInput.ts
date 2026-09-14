@@ -63,6 +63,7 @@ export class DesktopInput {
     const reel = GAME.ropeReelSpeed * dt;
     return {
       steer: this.steer,
+      look: this.getAimDirection(),
       head: this.head,
       leftHand: this.leftOrigin,
       rightHand: this.rightOrigin,
@@ -99,7 +100,8 @@ export class DesktopInput {
     if (event.repeat) return;
     switch (event.code) {
       case 'Space':
-        this.player.jumpOrRelease();
+        this.updateCamera();
+        this.player.jumpOrRelease(this.getAimDirection());
         break;
       case 'KeyE':
         this.zip();
@@ -140,12 +142,14 @@ export class DesktopInput {
 
   private readonly onMouseDown = (event: MouseEvent): void => {
     if (!this.locked) return;
+    this.updateCamera();
+    this.updateHandOrigins();
     const direction = this.getAimDirection();
     if (event.button === 1) {
       event.preventDefault();
       this.zip();
-    } else if (event.button === 0) this.leftHeld = this.player.shootWeb('left', this.camera.position, direction);
-    else if (event.button === 2) this.rightHeld = this.player.shootWeb('right', this.camera.position, direction);
+    } else if (event.button === 0) this.leftHeld = this.player.shootWeb('left', this.camera.position, direction, this.leftOrigin);
+    else if (event.button === 2) this.rightHeld = this.player.shootWeb('right', this.camera.position, direction, this.rightOrigin);
   };
 
   private readonly onMouseUp = (event: MouseEvent): void => {
@@ -161,7 +165,7 @@ export class DesktopInput {
   private zip(): void {
     this.updateCamera();
     this.updateHandOrigins();
-    this.player.zipToward(this.camera.position, this.getAimDirection(), this.rightOrigin, 'right', false);
+    this.player.zipToward(this.camera.position, this.getAimDirection(), this.rightOrigin, 'right', false, this.head, this.leftOrigin);
   }
 
   private releaseHeldWebs(): void {

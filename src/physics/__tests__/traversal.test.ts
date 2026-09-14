@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { PlayerBody } from '../PlayerBody';
-import { Zip, applyWebZip, findPerch } from '../Zip';
+import { Zip, findPerch } from '../Zip';
+import { WebZip } from '../WebZip';
 import { effectiveMode } from '../../settings';
 import { GAME } from '../../state';
 
@@ -77,15 +78,24 @@ describe('zip targeting', () => {
     expect(zip.arrivalVelocity.z).toBeLessThan(0);
   });
 
-  it('web zip pulls forward from the ground and in the air, capped', () => {
-    const body = groundedBody();
-    applyWebZip(body, new THREE.Vector3(0, 0, -30), GAME.webZipImpulse);
-    expect(-body.velocity.z).toBeCloseTo(GAME.webZipImpulse, 3);
-    expect(body.velocity.y).toBe(GAME.webZipLift);
-    expect(body.grounded).toBe(false);
+  it.each([true, false])('web zip waits for attachment and respects the pull speed cap (grounded: %s)', (grounded) => {
+    const body = new PlayerBody(new THREE.Vector3(0, grounded ? GAME.playerRadius : 50, 0));
+    body.grounded = grounded;
+    const zip = new WebZip();
+    zip.shoot(body.position, body.position.clone().add(new THREE.Vector3(0, 0, -60)));
+    while (zip.shot.flying) {
+      zip.step(GAME.fixedStep, body, []);
+      expect(zip.force.lengthSq()).toBe(0);
+      expect(body.velocity.lengthSq()).toBe(0);
+    }
+    zip.step(GAME.fixedStep, body, []);
+    expect(zip.force.z).toBeLessThan(0);
+    expect(zip.force.y).toBe(0);
+    expect(body.grounded).toBe(grounded);
     body.velocity.set(0, 0, -GAME.webZipMaxSpeed);
-    applyWebZip(body, new THREE.Vector3(0, 0, -30), GAME.webZipImpulse);
-    expect(-body.velocity.z).toBeCloseTo(GAME.webZipMaxSpeed, 3);
+    zip.step(GAME.fixedStep, body, []);
+    expect(zip.force.lengthSq()).toBe(0);
+    expect(-body.velocity.z).toBe(GAME.webZipMaxSpeed);
   });
 });
 

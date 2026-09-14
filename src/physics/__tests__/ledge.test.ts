@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { buildingLedges, findDualLedge, findLedge } from '../Ledge';
-import { applyWebZip, Zip } from '../Zip';
+import { Zip } from '../Zip';
+import { WebZip } from '../WebZip';
 import { PlayerBody } from '../PlayerBody';
 import { GAME } from '../../state';
 
@@ -95,12 +96,18 @@ describe('zip traversal', () => {
     expect(body.position.z).toBeGreaterThanOrEqual(GAME.playerRadius);
   });
 
-  it('Friendly web zip covers a meaningful forward distance before touching ground', () => {
+  it('Friendly web zip covers a longer distance while keeping ground contact', () => {
     const body = new PlayerBody(new THREE.Vector3(0, GAME.playerRadius, 0));
     body.grounded = true;
-    applyWebZip(body, new THREE.Vector3(0, GAME.playerRadius, -60), GAME.webZipImpulse);
-    for (let i = 0; i < 60; i += 1) body.step(GAME.fixedStep, []);
-    expect(body.position.z).toBeLessThan(-13);
-    expect(body.grounded).toBe(false);
+    const zip = new WebZip();
+    zip.shoot(body.position, new THREE.Vector3(0, GAME.playerRadius, -60));
+    for (let i = 0; i < 240 && zip.active; i += 1) {
+      zip.step(GAME.fixedStep, body, []);
+      body.step(GAME.fixedStep, [], zip.force);
+    }
+    expect(body.position.z).toBeLessThan(-30);
+    expect(body.grounded).toBe(true);
+    expect(zip.active).toBe(false);
+    expect(zip.cooldown).toBeGreaterThan(0);
   });
 });
