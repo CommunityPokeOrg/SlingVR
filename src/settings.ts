@@ -1,8 +1,22 @@
 export type ControlMode = 'friendly' | 'spectacular';
 
 export const SETTINGS = {
+  /** Player preference. Spectacular only takes effect while presenting in XR. */
   mode: 'friendly' as ControlMode,
+  xrPresenting: false,
 };
+
+/** Spectacular relies on physical hand pulls and punches, so keyboard/mouse always plays Friendly. */
+export function effectiveMode(settings: Pick<typeof SETTINGS, 'mode' | 'xrPresenting'> = SETTINGS): ControlMode {
+  return settings.mode === 'spectacular' && settings.xrPresenting ? 'spectacular' : 'friendly';
+}
+
+export function setXrPresenting(presenting: boolean): void {
+  SETTINGS.xrPresenting = presenting;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent<ControlMode>('slingvr:mode', { detail: effectiveMode() }));
+  }
+}
 
 const MODE_KEY = 'slingvr.mode';
 
@@ -33,7 +47,7 @@ export function setMode(mode: ControlMode): ControlMode {
     }
   }
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent<ControlMode>('slingvr:mode', { detail: mode }));
+    window.dispatchEvent(new CustomEvent<ControlMode>('slingvr:mode', { detail: effectiveMode() }));
   }
   return mode;
 }

@@ -11,7 +11,9 @@ export class PlayerBody {
   private readonly closest = new THREE.Vector3();
   private readonly delta = new THREE.Vector3();
   private readonly zeroForce = new THREE.Vector3();
+  private readonly horizontal = new THREE.Vector3();
   private readonly spawn = new THREE.Vector3(0, 8, 12);
+  private steering = false;
 
   constructor(spawn?: THREE.Vector3) {
     if (spawn) this.spawn.copy(spawn);
@@ -26,8 +28,11 @@ export class PlayerBody {
 
   step(dt: number, buildings: AABB[], force = this.zeroForce): void {
     this.velocity.addScaledVector(force, dt / GAME.playerMass);
+    if (this.grounded) {
+      if (!this.steering) this.applyGroundFriction(dt);
+    } else this.velocity.multiplyScalar(Math.max(0, 1 - GAME.airDrag * dt));
+    this.steering = false;
     this.velocity.y += GAME.gravity * dt;
-    this.velocity.multiplyScalar(Math.max(0, 1 - GAME.airDrag * dt));
     this.velocity.y = Math.max(this.velocity.y, -GAME.terminalVelocity);
     this.nextPosition.copy(this.position).addScaledVector(this.velocity, dt);
     this.grounded = false;
@@ -40,7 +45,7 @@ export class PlayerBody {
     this.position.copy(this.nextPosition);
   }
 
-  jump(strength = 10): void {
+  jump(strength: number = GAME.jumpSpeed): void {
     if (this.grounded) {
       this.velocity.y = strength;
       this.grounded = false;
@@ -49,6 +54,36 @@ export class PlayerBody {
 
   push(direction: THREE.Vector3, amount: number): void {
     this.velocity.addScaledVector(direction, amount);
+  }
+
+  /** Grounded: drive toward a capped run speed. Airborne: gentle control that never robs swing/zip momentum. */
+  steer(direction: THREE.Vector3, dt: number): void {
+    if (direction.lengthSq() < 1e-6) return;
+    if (this.grounded) {
+      this.steering = true;
+      const targetX = direction.x * GAME.groundMaxSpeed;
+      const targetZ = direction.z * GAME.groundMaxSpeed;
+      const blend = Math.min(1, (GAME.groundAcceleration / GAME.groundMaxSpeed) * dt);
+      this.velocity.x += (targetX - this.velocity.x) * blend;
+      this.velocity.z += (targetZ - this.velocity.z) * blend;
+      return;
+    }
+    const along = this.velocity.x * direction.x + this.velocity.z * direction.z;
+    if (along >= GAME.airControlSpeed) return;
+    const add = Math.min(GAME.airAcceleration * dt, GAME.airControlSpeed - along);
+    this.velocity.x += direction.x * add;
+    this.velocity.z += direction.z * add;
+  }
+
+  private applyGroundFriction(dt: number): void {
+    this.horizontal.set(this.velocity.x, 0, this.velocity.z);
+    const speed = this.horizontal.length();
+    if (speed < 1e-6) return;
+    const damped = speed * Math.exp(-GAME.groundFriction * dt);
+    const next = damped < GAME.groundStopSpeed ? 0 : damped;
+    const scale = next / speed;
+    this.velocity.x *= scale;
+    this.velocity.z *= scale;
   }
 
   nearestWall(buildings: AABB[]) {

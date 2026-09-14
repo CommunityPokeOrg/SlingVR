@@ -4,7 +4,7 @@ import type { AirTricks } from '../physics/AirTricks';
 import type { WallRun } from '../physics/WallRun';
 import type { Zip } from '../physics/Zip';
 import type { ControlMode } from '../settings';
-import { SETTINGS } from '../settings';
+import { effectiveMode } from '../settings';
 import type { TravelState } from '../state';
 
 export class Hud {
@@ -14,7 +14,7 @@ export class Hud {
   private lastFrame = performance.now();
   private frames = 0;
   private fps = 60;
-  private mode: ControlMode = SETTINGS.mode;
+  private mode: ControlMode = effectiveMode();
   private readonly toast: HTMLElement;
 
   constructor() {
@@ -72,6 +72,7 @@ export class Hud {
 
   private readonly onMode = (event: Event): void => {
     const mode = (event as CustomEvent<ControlMode>).detail;
+    if (mode === this.mode) return;
     this.mode = mode;
     this.renderHelp();
     this.toast.textContent = `Switched to ${mode === 'friendly' ? 'Friendly Neighborhood' : 'Spectacular'}`;
@@ -81,6 +82,6 @@ export class Hud {
 
   private renderHelp(): void {
     const friendly = this.mode === 'friendly';
-    this.help.innerHTML = `<strong>${friendly ? 'FRIENDLY NEIGHBORHOOD' : 'SPECTACULAR'} CONTROLS</strong><br>${friendly ? 'WASD steer · Mouse look · LMB/RMB reel webs' : 'WASD steer · Mouse look · W while attached pumps webs'}<br>Space jump/release · ${friendly ? 'E zip' : 'Hold E'} · Shift wall-run/dash<br>${friendly ? 'M toggle mode' : 'M toggle mode · E/MMB hold charged zip'} · R reset · H help · F debug<br><br><strong>VR</strong><br>Triggers shoot webs · Grip ${friendly ? 'zips' : 'charges zip'} · ${friendly ? 'Left stick steers · right stick wall-runs/turns' : 'left stick steers and wall-runs · head turns'}<br>A/X jump · ${friendly ? 'B/Y air dash' : 'physical punch air dash'} · Left stick click toggles mode`;
+    this.help.innerHTML = `<strong>DESKTOP</strong><br>WASD run · Mouse look · LMB/RMB shoot + reel webs<br>E / MMB zip: green perch = zip-to-point, yellow wall = web zip<br>Space jump/release · Space on landing = slingshot · Shift wall-run/dash<br>R reset · H help · F debug<br><br><strong>VR · ${friendly ? 'FRIENDLY NEIGHBORHOOD' : 'SPECTACULAR'}</strong><br>Triggers shoot webs · Grip ${friendly ? 'zips' : 'pull back to charge zip'} · ${friendly ? 'Left stick steers · right stick wall-runs/turns' : 'left stick steers and wall-runs · head turns'}<br>A/X jump · ${friendly ? 'B/Y air dash' : 'physical punch air dash'} · Left stick click toggles mode`;
   }
 }

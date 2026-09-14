@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { WebGLRenderer } from 'three';
 import { Player, type FrameInput } from '../Player';
-import { SETTINGS, toggleMode } from '../settings';
+import { effectiveMode, setXrPresenting, toggleMode } from '../settings';
 import { GAME } from '../state';
 
 interface VisualInputs {
@@ -94,10 +94,13 @@ export class XRInput {
     const leftY = this.axis(leftGamepad, 3, 1);
     const leftMagnitude = Math.hypot(leftX, leftY);
     this.steer.copy(this.headRight).multiplyScalar(leftX).addScaledVector(this.headForward, -leftY);
+    if (leftMagnitude < 0.12) this.steer.set(0, 0, 0);
+    else if (this.steer.lengthSq() > 1) this.steer.normalize();
     const rightX = this.axis(rightGamepad, 2, 0);
     const rightY = this.axis(rightGamepad, 3, 1);
     const rightMagnitude = Math.hypot(rightX, rightY);
-    if (SETTINGS.mode === 'friendly') {
+    const spectacular = effectiveMode() === 'spectacular';
+    if (!spectacular) {
       this.frameInput.wallAlong = -rightY;
       this.frameInput.runHeld = rightY < -0.5 && rightMagnitude > 0.5;
       this.frameInput.turn = THREE.MathUtils.clamp(rightX, -1, 1);
@@ -110,15 +113,15 @@ export class XRInput {
       this.frameInput.leftReel = 0;
       this.frameInput.rightReel = 0;
     }
-    this.handleButtonEdges(leftGamepad, rightGamepad);
-    if (SETTINGS.mode === 'spectacular') this.checkPunches();
+    this.handleButtonEdges(leftGamepad, rightGamepad, spectacular);
+    if (spectacular) this.checkPunches();
     else this.player.setPunchSpeed(0);
     return this.frameInput;
   }
 
   updateRig(dt: number): void {
     if (!this.active) return;
-    if (SETTINGS.mode === 'friendly') this.rig.rotation.y += this.frameInput.turn * Math.PI * 0.5 * dt;
+    if (effectiveMode() === 'friendly') this.rig.rotation.y += this.frameInput.turn * Math.PI * 0.5 * dt;
     this.rig.position.set(this.player.body.position.x, this.player.body.position.y - GAME.playerRadius, this.player.body.position.z);
   }
 
@@ -131,6 +134,7 @@ export class XRInput {
 
   private readonly onSessionStart = (): void => {
     this.active = true;
+    setXrPresenting(true);
     this.rig.visible = true;
     this.rig.position.set(this.player.body.position.x, this.player.body.position.y - GAME.playerRadius, this.player.body.position.z);
     this.rig.add(this.camera);
@@ -145,6 +149,8 @@ export class XRInput {
 
   private readonly onSessionEnd = (): void => {
     this.active = false;
+    setXrPresenting(false);
+    this.player.releaseZip();
     this.rig.visible = false;
     this.rig.remove(this.camera);
     this.scene.add(this.camera);
@@ -192,12 +198,12 @@ export class XRInput {
     return gamepad?.buttons[0]?.value ?? 0;
   }
 
-  private handleButtonEdges(left: Gamepad | undefined, right: Gamepad | undefined): void {
+  private handleButtonEdges(left: Gamepad | undefined, right: Gamepad | undefined, spectacular: boolean): void {
     const jumpPressed = (left?.buttons[4]?.pressed ?? false) || (right?.buttons[4]?.pressed ?? false);
     if (jumpPressed && !this.buttonHeld[0]) this.player.jumpOrRelease();
     this.buttonHeld[0] = jumpPressed;
     const dashPressed = (left?.buttons[5]?.pressed ?? false) || (right?.buttons[5]?.pressed ?? false);
-    if (SETTINGS.mode === 'friendly' && dashPressed && !this.buttonHeld[1]) this.player.dash(this.headForward);
+    if (!spectacular && dashPressed && !this.buttonHeld[1]) this.player.dash(this.headForward);
     this.buttonHeld[1] = dashPressed;
     const leftStickClick = left?.buttons[3]?.pressed ?? false;
     if (leftStickClick && !this.leftStickClickHeld) toggleMode();

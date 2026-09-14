@@ -75,6 +75,11 @@ spectacularMode?.addEventListener('click', () => {
 });
 window.addEventListener('slingvr:mode', updateModeButtons);
 updateModeButtons();
+const xrSupport = navigator.xr?.isSessionSupported('immersive-vr') ?? Promise.resolve(false);
+xrSupport.catch(() => false).then((supported) => {
+  spectacularMode?.classList.toggle('hidden', !supported);
+  document.querySelector<HTMLElement>('#vr-only-note')?.classList.toggle('hidden', supported);
+});
 document.querySelector<HTMLButtonElement>('#start-button')?.addEventListener('click', () => {
   overlay?.classList.add('hidden');
   desktop.requestLock();

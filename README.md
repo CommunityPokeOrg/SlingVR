@@ -8,21 +8,29 @@ SlingVR is a compact WebXR traversal playground inspired by superhero swinging g
 
 - Fixed-timestep custom rope physics with reel-in, spring tension, momentum, and a simplified single-corner tether wrap.
 - Seeded low-poly city with instanced buildings, rooftop perch targets, analytic ray/AABB collision, and a readable HUD.
-- Web zip and point launch, wall running, air dash, style scoring, and desktop or WebXR controller input.
+- One-line **Web Zip** (forward pull impulse, grounded or airborne), two-line **Zip-to-Point** onto perches within a strict range with a mount-and-slingshot jump, wall running, air dash, style scoring, and desktop or WebXR controller input.
+- Grounded friction so the player stops when you stop steering, with a capped run speed and momentum-preserving air control.
 - Vite + Three.js + TypeScript build that deploys to GitHub Pages.
 
 ## Control modes
 
-SlingVR opens in **Friendly Neighborhood** mode for assisted, comfortable traversal. Switch to **Spectacular** from the start overlay, with `M` on desktop, or by clicking the left thumbstick in XR.
+SlingVR opens in **Friendly Neighborhood** mode for assisted, comfortable traversal. **Spectacular** is strictly VR-only: it is offered on the start overlay only when an immersive-vr session is supported, can be toggled with a left-thumbstick click in XR, and the stored preference resolves back to Friendly whenever the app is not presenting in XR (`effectiveMode()` in `src/settings.ts`). Keyboard/mouse always runs the Friendly control set.
 
-| Feature | Friendly Neighborhood | Spectacular VR | Spectacular desktop |
-| --- | --- | --- | --- |
-| Turning | Head plus smooth right-stick turn | Head-only turning | Mouse look |
-| Web swing | Trigger/held mouse buttons reel and add swing assistance | Physical hand pulls reel and build momentum | `W` while attached stands in for the arm pull |
-| Web zip | Guided immediate zip | Pull back while gripping to charge, then release | Hold `E` or middle mouse to charge |
-| Wall run | Right stick vertical input | Left stick steers and runs near a wall | `WASD` plus Shift |
-| Jump off wall | A/X or Space | A/X or Space | Space |
-| Air dash | B/Y or Shift | Physical forward punch | Shift fallback |
+| Feature | Friendly Neighborhood (desktop + VR) | Spectacular (VR only) |
+| --- | --- | --- |
+| Turning | Mouse look / head plus smooth right-stick turn | Head-only turning |
+| Web swing | Held mouse buttons or triggers reel and add swing assistance | Physical hand pulls reel and build momentum |
+| Web Zip | Aim at a wall, tap zip: one line, instant forward pull | Grip, pull the hand back to charge, release for a stronger pull |
+| Zip-to-Point | Aim at a highlighted perch inside range, tap zip: both lines attach and carry you onto it | Same, charge sets travel speed |
+| Wall run | Right stick vertical input / `WASD` + Shift | Left stick steers and runs near a wall |
+| Jump off wall | A/X or Space | A/X |
+| Air dash | B/Y or Shift | Physical forward punch |
+
+### Zip rules
+
+- **Web Zip** (`GAME.webZipRange`, 60 m): one web line to any building surface, then an impulse toward it that keeps existing momentum along the pull and caps at `GAME.webZipMaxSpeed`. From the ground it also lifts you off the floor.
+- **Zip-to-Point** (`GAME.zipRange`, 45 m, `GAME.zipConeDegrees` aim cone): only rooftop perches count. Both hands/lines attach, the player is carried straight to the perch and mounted on it. Targets beyond the range are rejected both at aim time and again at launch.
+- **Mount slingshot**: pressing jump while the zip is still in flight buffers it; pressing within `GAME.mountGraceTime` after landing on the perch reuses the arrival direction as a forward launch (`mountSlingshotSpeed` / `mountSlingshotLift`).
 
 ## Controls
 
@@ -31,9 +39,10 @@ SlingVR opens in **Friendly Neighborhood** mode for assisted, comfortable traver
 | Look / steer | Mouse + WASD | Head + thumbstick (mode-dependent) |
 | Shoot web | LMB / RMB (hold) | Controller trigger (hold) |
 | Jump / release / wall jump-off | Space | A / X |
-| Zip / point launch | E or middle mouse | Controller grip |
+| Web Zip / Zip-to-Point | E or middle mouse | Controller grip |
 | Wall run / dash | Hold Shift / tap Shift | Thumbsticks + jump or physical punch |
-| Toggle mode / reset / help / debug | M / R / H / F | Left-stick click / — |
+| Reset / help / debug | R / H / F | — |
+| Toggle mode | — (desktop is always Friendly) | Left-stick click |
 
 ### XR controls
 

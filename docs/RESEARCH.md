@@ -42,8 +42,9 @@ Loop-de-loops and more elaborate slingshot routes are intentionally future work.
 | Pendulum swing | `physics/Web.ts` | One point mass, one or two independent webs |
 | Reel-in | `Web.step` | Constant reel speed while held |
 | Corner tether | `Web.step` | One first-hit bend, no unwrap |
-| Web zip | `physics/Zip.ts` | Fixed-speed travel to one target |
-| Point launch | `Zip.launch` + perch data | Perches are glowing procedural boxes |
+| Web zip | `Zip.applyWebZip` | One line to a surface inside `webZipRange`, then a forward impulse that keeps momentum along the pull and caps at `webZipMaxSpeed`; works grounded or airborne |
+| Point launch (zip-to-point) | `Zip.launch`/`Zip.step` + perch data | Both lines attach to a perch inside `zipRange` and a `zipConeDegrees` aim cone, the player is carried straight onto it and mounted; a jump buffered in flight or pressed within `mountGraceTime` slingshots along the arrival direction |
+| Grounded footing | `PlayerBody.steer`/`applyGroundFriction` | Exponential friction with a stop threshold when not steering; steering drives toward `groundMaxSpeed`, air steering only adds up to `airControlSpeed` |
 | Wall run | `physics/WallRun.ts` | AABB faces only, no camera banking |
 | Air tricks | `physics/AirTricks.ts` | Dash impulse and cosmetic score |
 | Web Wings | Not implemented | Air dash is a small analogue |
@@ -61,7 +62,7 @@ The two control modes separate accessibility from expressiveness. **Friendly Nei
 | Punch forward | Air dash / Web Wings-like traversal burst | Smooth controller pose velocity over three frames, require `3.2m/s` and a horizontal direction within 40° of head-forward |
 | Turn physically | Expressive VR traversal without a comfort turn assist | Spectacular sets smooth turn to zero and leaves orientation to headset tracking |
 
-Desktop Spectacular uses `W` as a keyboard stand-in for the physical arm pull, and `E`/middle mouse hold time as a fallback for zip charge. These substitutes preserve the timing and tradeoffs without pretending that mouse input is hand tracking.
+Spectacular is VR-only. Playtesting showed that keyboard stand-ins for arm pulls and hold-to-charge zips read as a worse Friendly mode rather than a mastery mode, so the desktop adapter always drives the Friendly control set and the stored Spectacular preference only takes effect while an XR session is presenting (`effectiveMode()`).
 
 ## VR-specific considerations
 

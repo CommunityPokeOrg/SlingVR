@@ -1,8 +1,14 @@
 import * as THREE from 'three';
 import { Player, type FrameInput } from '../Player';
-import { SETTINGS, toggleMode } from '../settings';
 import { GAME } from '../state';
 
+const MOUSE_SENSITIVITY = 0.0021;
+const MAX_PITCH = 1.45;
+
+/**
+ * Keyboard/mouse adapter. Always drives the Friendly control set: Spectacular's physical pulls,
+ * charged zips and punches only exist in XR.
+ */
 export class DesktopInput {
   private readonly player: Player;
   private readonly camera: THREE.PerspectiveCamera;
@@ -19,7 +25,6 @@ export class DesktopInput {
   private pitch = 0;
   private leftHeld = false;
   private rightHeld = false;
-  private zipHeld = false;
 
   constructor(player: Player, camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement) {
     this.player = player;
@@ -27,15 +32,21 @@ export class DesktopInput {
     this.canvas = canvas;
     addEventListener('keydown', this.onKeyDown);
     addEventListener('keyup', this.onKeyUp);
+    addEventListener('blur', this.onBlur);
     addEventListener('mousemove', this.onMouseMove);
     canvas.addEventListener('mousedown', this.onMouseDown);
     canvas.addEventListener('mouseup', this.onMouseUp);
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
     canvas.addEventListener('click', () => this.requestLock());
+    document.addEventListener('pointerlockchange', this.onPointerLockChange);
   }
 
   requestLock(): void {
     void this.canvas.requestPointerLock().catch(() => undefined);
+  }
+
+  get locked(): boolean {
+    return document.pointerLockElement === this.canvas;
   }
 
   getFrameInput(dt = GAME.fixedStep): FrameInput {
@@ -49,6 +60,7 @@ export class DesktopInput {
     if (this.keys.has('KeyD')) this.steer.add(this.right);
     if (this.keys.has('KeyA')) this.steer.addScaledVector(this.right, -1);
     if (this.steer.lengthSq() > 0) this.steer.normalize();
+    const reel = GAME.ropeReelSpeed * dt;
     return {
       steer: this.steer,
       head: this.head,
@@ -56,8 +68,8 @@ export class DesktopInput {
       rightHand: this.rightOrigin,
       runHeld: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
       wallAlong: this.keys.has('KeyW') ? 1 : this.keys.has('KeyS') ? -1 : 0,
-      leftReel: SETTINGS.mode === 'friendly' && this.leftHeld || SETTINGS.mode === 'spectacular' && this.keys.has('KeyW') ? GAME.ropeReelSpeed * dt : 0,
-      rightReel: SETTINGS.mode === 'friendly' && this.rightHeld || SETTINGS.mode === 'spectacular' && this.keys.has('KeyW') ? GAME.ropeReelSpeed * dt : 0,
+      leftReel: this.leftHeld ? reel : 0,
+      rightReel: this.rightHeld ? reel : 0,
       turn: 0,
     };
   }
@@ -71,54 +83,67 @@ export class DesktopInput {
   getVisualInputs(): { left: THREE.Vector3; right: THREE.Vector3; aimOrigin: THREE.Vector3; aimDirection: THREE.Vector3 } {
     this.updateCamera();
     this.updateHandOrigins();
-    this.aimDirection.set(0, 0, -1).applyEuler(this.camera.rotation).normalize();
-    return { left: this.leftOrigin, right: this.rightOrigin, aimOrigin: this.camera.position, aimDirection: this.aimDirection };
+    return { left: this.leftOrigin, right: this.rightOrigin, aimOrigin: this.camera.position, aimDirection: this.getAimDirection() };
   }
 
   private readonly onMouseMove = (event: MouseEvent): void => {
-    if (document.pointerLockElement !== this.canvas) return;
-    this.yaw -= event.movementX * 0.0023;
-    this.pitch = THREE.MathUtils.clamp(this.pitch - event.movementY * 0.0023, -1.45, 1.45);
+    if (!this.locked) return;
+    this.yaw -= event.movementX * MOUSE_SENSITIVITY;
+    this.pitch = THREE.MathUtils.clamp(this.pitch - event.movementY * MOUSE_SENSITIVITY, -MAX_PITCH, MAX_PITCH);
   };
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     this.keys.add(event.code);
-    if (event.code === 'Space') {
-      event.preventDefault();
-      this.player.jumpOrRelease();
-    } else if (event.code === 'KeyM' && !event.repeat) {
-      toggleMode();
-    } else if (event.code === 'KeyE') {
-      if (!this.zipHeld) {
-        this.updateHandOrigins();
-        this.zipHeld = this.player.zipToward(this.camera.position, this.getAimDirection(), this.rightOrigin, 'right', false);
-      }
-    } else if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
-      this.player.dash(this.getAimDirection());
-    } else if (event.code === 'KeyR') this.player.reset();
-    else if (event.code === 'KeyH') this.player.hud.toggleHelp();
-    else if (event.code === 'KeyF') this.player.hud.toggleDebug();
+    if (event.code === 'Space') event.preventDefault();
+    if (event.repeat) return;
+    switch (event.code) {
+      case 'Space':
+        this.player.jumpOrRelease();
+        break;
+      case 'KeyE':
+        this.zip();
+        break;
+      case 'ShiftLeft':
+      case 'ShiftRight':
+        this.player.dash(this.getAimDirection());
+        break;
+      case 'KeyR':
+        this.player.reset();
+        break;
+      case 'KeyH':
+        this.player.hud.toggleHelp();
+        break;
+      case 'KeyF':
+        this.player.hud.toggleDebug();
+        break;
+      default:
+        break;
+    }
   };
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
     this.keys.delete(event.code);
-    if (event.code === 'KeyE') {
-      this.zipHeld = false;
-      this.player.releaseZip();
+  };
+
+  private readonly onBlur = (): void => {
+    this.keys.clear();
+    this.releaseHeldWebs();
+  };
+
+  private readonly onPointerLockChange = (): void => {
+    if (!this.locked) {
+      this.keys.clear();
+      this.releaseHeldWebs();
     }
   };
 
   private readonly onMouseDown = (event: MouseEvent): void => {
+    if (!this.locked) return;
     const direction = this.getAimDirection();
     if (event.button === 1) {
-      if (SETTINGS.mode === 'friendly') this.player.zipToward(this.camera.position, direction);
-      else {
-        this.updateHandOrigins();
-        this.zipHeld = this.player.zipToward(this.camera.position, direction, this.rightOrigin, 'right', false);
-      }
-      return;
-    }
-    if (event.button === 0) this.leftHeld = this.player.shootWeb('left', this.camera.position, direction);
+      event.preventDefault();
+      this.zip();
+    } else if (event.button === 0) this.leftHeld = this.player.shootWeb('left', this.camera.position, direction);
     else if (event.button === 2) this.rightHeld = this.player.shootWeb('right', this.camera.position, direction);
   };
 
@@ -130,11 +155,20 @@ export class DesktopInput {
       this.rightHeld = false;
       this.player.releaseWeb('right');
     }
-    if (event.button === 1) {
-      this.zipHeld = false;
-      this.player.releaseZip();
-    }
   };
+
+  private zip(): void {
+    this.updateCamera();
+    this.updateHandOrigins();
+    this.player.zipToward(this.camera.position, this.getAimDirection(), this.rightOrigin, 'right', false);
+  }
+
+  private releaseHeldWebs(): void {
+    if (this.leftHeld) this.player.releaseWeb('left');
+    if (this.rightHeld) this.player.releaseWeb('right');
+    this.leftHeld = false;
+    this.rightHeld = false;
+  }
 
   private getAimDirection(): THREE.Vector3 {
     return this.aimDirection.set(0, 0, -1).applyEuler(this.camera.rotation).normalize();
