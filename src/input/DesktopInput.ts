@@ -1,99 +1,70 @@
 import * as THREE from 'three';
-import type { CityData } from '../city/CityGenerator';
-import { raycastAABBs } from '../physics/collision';
-import { AirTricks } from '../physics/AirTricks';
-import { PlayerBody } from '../physics/PlayerBody';
-import { WallRun } from '../physics/WallRun';
-import { Web } from '../physics/Web';
-import { Zip } from '../physics/Zip';
-import { Reticle } from '../render/Reticle';
-import { WebLine } from '../render/WebLine';
-import { Hud } from '../ui/Hud';
-import { GAME, type TravelState } from '../state';
+import { Player, type FrameInput } from '../Player';
+import { GAME } from '../state';
 
 export class DesktopInput {
-  readonly body = new PlayerBody();
-  private readonly leftWeb = new Web();
-  private readonly rightWeb = new Web();
-  private readonly zip = new Zip();
-  private readonly wallRun = new WallRun();
-  private readonly tricks = new AirTricks();
-  private readonly hud = new Hud();
-  private readonly leftLine = new WebLine();
-  private readonly rightLine = new WebLine();
-  private readonly reticle: Reticle;
-  private readonly keys = new Set<string>();
-  private yaw = 0;
-  private pitch = 0;
-  private leftHeld = false;
-  private rightHeld = false;
-  private readonly city: CityData;
+  private readonly player: Player;
   private readonly camera: THREE.PerspectiveCamera;
   private readonly canvas: HTMLCanvasElement;
-  private readonly renderer: THREE.WebGLRenderer;
+  private readonly keys = new Set<string>();
+  private readonly steer = new THREE.Vector3();
+  private readonly forward = new THREE.Vector3();
+  private readonly right = new THREE.Vector3();
+  private readonly aimDirection = new THREE.Vector3();
+  private readonly leftOrigin = new THREE.Vector3();
+  private readonly rightOrigin = new THREE.Vector3();
+  private yaw = 0;
+  private pitch = -0.12;
+  private leftHeld = false;
+  private rightHeld = false;
 
-  constructor(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement, scene: THREE.Scene, city: CityData, renderer: THREE.WebGLRenderer) {
+  constructor(player: Player, camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement) {
+    this.player = player;
     this.camera = camera;
     this.canvas = canvas;
-    this.city = city;
-    this.renderer = renderer;
-    this.reticle = new Reticle(scene);
-    scene.add(this.leftLine.group, this.rightLine.group);
     addEventListener('keydown', this.onKeyDown);
     addEventListener('keyup', this.onKeyUp);
     addEventListener('mousemove', this.onMouseMove);
     canvas.addEventListener('mousedown', this.onMouseDown);
     canvas.addEventListener('mouseup', this.onMouseUp);
+    canvas.addEventListener('contextmenu', (event) => event.preventDefault());
     canvas.addEventListener('click', () => this.requestLock());
   }
 
   requestLock(): void {
-    void this.canvas.requestPointerLock();
+    void this.canvas.requestPointerLock().catch(() => undefined);
   }
 
-  step(dt: number): void {
-    if (this.renderer.xr.isPresenting) return;
-    const forward = new THREE.Vector3(Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    const right = new THREE.Vector3(Math.cos(this.yaw), 0, Math.sin(this.yaw));
-    const force = new THREE.Vector3();
-    if (this.keys.has('KeyW')) force.add(forward);
-    if (this.keys.has('KeyS')) force.addScaledVector(forward, -1);
-    if (this.keys.has('KeyD')) force.add(right);
-    if (this.keys.has('KeyA')) force.addScaledVector(right, -1);
-    if (force.lengthSq() > 0) this.body.push(force.normalize(), 22 * dt);
-    if (!this.zip.active) {
-      this.body.step(dt, this.city.buildings);
-      this.leftWeb.step(dt, this.body, this.city.buildings, this.leftHeld);
-      this.rightWeb.step(dt, this.body, this.city.buildings, this.rightHeld);
-      this.wallRun.step(dt, this.body, this.city.buildings, this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'), this.keys.has('KeyW') ? 1 : 0);
-    } else this.zip.step(dt, this.body);
-    this.tricks.step(dt);
-    if (this.body.grounded) this.tricks.reset();
-    this.hud.update(this.body, this.state(), this.tricks, this.leftWeb, this.rightWeb, this.zip, this.wallRun);
+  getFrameInput(): FrameInput {
+    this.forward.set(Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+    this.right.set(Math.cos(this.yaw), 0, Math.sin(this.yaw));
+    this.steer.set(0, 0, 0);
+    if (this.keys.has('KeyW')) this.steer.add(this.forward);
+    if (this.keys.has('KeyS')) this.steer.addScaledVector(this.forward, -1);
+    if (this.keys.has('KeyD')) this.steer.add(this.right);
+    if (this.keys.has('KeyA')) this.steer.addScaledVector(this.right, -1);
+    if (this.steer.lengthSq() > 0) this.steer.normalize();
+    return {
+      steer: this.steer,
+      runHeld: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
+      wallAlong: this.keys.has('KeyW') ? 1 : this.keys.has('KeyS') ? -1 : 0,
+      reelLeft: this.leftHeld,
+      reelRight: this.rightHeld,
+    };
   }
 
   updateCamera(): void {
-    this.camera.position.copy(this.body.position);
+    this.camera.position.copy(this.player.body.position);
     this.camera.position.y += GAME.eyeHeight;
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
-    const origin = this.camera.position;
-    const look = new THREE.Vector3(0, 0, -1).applyEuler(this.camera.rotation).normalize();
-    const hit = raycastAABBs(origin, look, this.city.buildings, GAME.zipRange);
-    let perch: THREE.Vector3 | null = null;
-    let bestDistance: number = GAME.zipRange;
-    for (const candidate of this.city.perches) {
-      const offset = candidate.clone().sub(origin);
-      const distance = offset.length();
-      if (distance < bestDistance && offset.normalize().dot(look) > Math.cos(THREE.MathUtils.degToRad(20))) {
-        bestDistance = distance;
-        perch = candidate;
-      }
-    }
-    this.reticle.update(perch ?? hit?.point ?? null, perch !== null);
-    const leftOrigin = origin.clone().add(new THREE.Vector3(-0.28, -0.16, -0.5).applyEuler(this.camera.rotation));
-    const rightOrigin = origin.clone().add(new THREE.Vector3(0.28, -0.16, -0.5).applyEuler(this.camera.rotation));
-    this.leftLine.update(leftOrigin, this.leftWeb);
-    this.rightLine.update(rightOrigin, this.rightWeb);
+  }
+
+  getVisualInputs(): { left: THREE.Vector3; right: THREE.Vector3; aimOrigin: THREE.Vector3; aimDirection: THREE.Vector3 } {
+    this.updateCamera();
+    this.aimDirection.set(0, 0, -1).applyEuler(this.camera.rotation).normalize();
+    this.leftOrigin.set(-0.28, -0.16, -0.5).applyEuler(this.camera.rotation).add(this.camera.position);
+    this.rightOrigin.set(0.28, -0.16, -0.5).applyEuler(this.camera.rotation).add(this.camera.position);
+    return { left: this.leftOrigin, right: this.rightOrigin, aimOrigin: this.camera.position, aimDirection: this.aimDirection };
   }
 
   private readonly onMouseMove = (event: MouseEvent): void => {
@@ -106,17 +77,14 @@ export class DesktopInput {
     this.keys.add(event.code);
     if (event.code === 'Space') {
       event.preventDefault();
-      if (this.body.grounded) this.body.jump();
-      else {
-        this.leftWeb.release();
-        this.rightWeb.release();
-      }
-    }
-    if (event.code === 'KeyE') this.zip.launch(this.camera.position, new THREE.Vector3(0, 0, -1).applyEuler(this.camera.rotation), this.city);
-    if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') this.tricks.dash(this.body, new THREE.Vector3(0, 0, -1).applyEuler(this.camera.rotation));
-    if (event.code === 'KeyR') this.body.reset();
-    if (event.code === 'KeyH') this.hud.toggleHelp();
-    if (event.code === 'KeyF') this.hud.toggleDebug();
+      this.player.jumpOrRelease();
+    } else if (event.code === 'KeyE') {
+      this.player.zipToward(this.camera.position, this.getAimDirection());
+    } else if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+      this.player.dash(this.getAimDirection());
+    } else if (event.code === 'KeyR') this.player.reset();
+    else if (event.code === 'KeyH') this.player.hud.toggleHelp();
+    else if (event.code === 'KeyF') this.player.hud.toggleDebug();
   };
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
@@ -124,40 +92,26 @@ export class DesktopInput {
   };
 
   private readonly onMouseDown = (event: MouseEvent): void => {
+    const direction = this.getAimDirection();
     if (event.button === 1) {
-      this.zip.launch(this.camera.position, new THREE.Vector3(0, 0, -1).applyEuler(this.camera.rotation), this.city);
+      this.player.zipToward(this.camera.position, direction);
       return;
     }
-    const direction = new THREE.Vector3(0, 0, -1).applyEuler(this.camera.rotation).normalize();
-    const hit = raycastAABBs(this.camera.position, direction, this.city.buildings, GAME.zipRange);
-    if (!hit) return;
-    if (event.button === 0) {
-      this.leftHeld = true;
-      this.leftWeb.attach(hit.point, this.body);
-    } else if (event.button === 2) {
-      this.rightHeld = true;
-      this.rightWeb.attach(hit.point, this.body);
-    }
+    if (event.button === 0) this.leftHeld = this.player.shootWeb('left', this.camera.position, direction);
+    else if (event.button === 2) this.rightHeld = this.player.shootWeb('right', this.camera.position, direction);
   };
 
   private readonly onMouseUp = (event: MouseEvent): void => {
     if (event.button === 0) {
       this.leftHeld = false;
-      this.leftWeb.release();
+      this.player.releaseWeb('left');
     } else if (event.button === 2) {
       this.rightHeld = false;
-      this.rightWeb.release();
+      this.player.releaseWeb('right');
     }
   };
 
-  private state(): TravelState {
-    if (this.zip.active) return 'Zipping';
-    if (this.wallRun.active) return 'WallRunning';
-    const left = this.leftWeb.attached;
-    const right = this.rightWeb.attached;
-    if (left && right) return 'Swinging Both';
-    if (left) return 'Swinging L';
-    if (right) return 'Swinging R';
-    return this.body.grounded ? 'Grounded' : 'Airborne';
+  private getAimDirection(): THREE.Vector3 {
+    return this.aimDirection.set(0, 0, -1).applyEuler(this.camera.rotation).normalize();
   }
 }

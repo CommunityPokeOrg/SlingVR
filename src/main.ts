@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 import { CityGenerator } from './city/CityGenerator';
+import { Player } from './Player';
 import { DesktopInput } from './input/DesktopInput';
 import { XRInput } from './input/XRInput';
 import { GAME } from './state';
@@ -13,7 +14,8 @@ scene.background = new THREE.Color('#081322');
 scene.fog = new THREE.Fog('#081322', 90, 520);
 
 const camera = new THREE.PerspectiveCamera(74, innerWidth / innerHeight, 0.1, 900);
-camera.position.set(0, GAME.eyeHeight, 12);
+camera.position.set(0, 8 + GAME.eyeHeight, 12);
+camera.rotation.set(-0.12, 0, 0, 'YXZ');
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -30,9 +32,9 @@ scene.add(sun);
 
 const city = new CityGenerator();
 scene.add(city.group);
-
-const desktop = new DesktopInput(camera, renderer.domElement, scene, city.data, renderer);
-const xr = new XRInput(renderer, camera, city.data, scene);
+const player = new Player(city.data, scene);
+const desktop = new DesktopInput(player, camera, renderer.domElement);
+const xr = new XRInput(renderer, camera, player, scene);
 const overlay = document.querySelector<HTMLElement>('#start-overlay');
 document.querySelector<HTMLButtonElement>('#start-button')?.addEventListener('click', () => {
   overlay?.classList.add('hidden');
@@ -45,15 +47,22 @@ renderer.setAnimationLoop((now) => {
   const elapsed = Math.min((now - previous) / 1000, 0.1);
   previous = now;
   accumulator += elapsed;
+  const input = renderer.xr.isPresenting ? xr.prepareFrame() : desktop.getFrameInput();
   let substeps = 0;
   while (accumulator >= GAME.fixedStep && substeps < GAME.maxSubsteps) {
-    desktop.step(GAME.fixedStep);
-    xr.step(GAME.fixedStep);
+    player.stepPhysics(GAME.fixedStep, input);
     accumulator -= GAME.fixedStep;
     substeps += 1;
   }
-  desktop.updateCamera();
-  xr.update();
+  if (renderer.xr.isPresenting) {
+    xr.updateRig();
+    const visualInputs = xr.getVisualInputs();
+    player.updateVisuals(visualInputs.left, visualInputs.right, visualInputs.aimOrigin, visualInputs.aimDirection);
+  } else {
+    desktop.updateCamera();
+    const visualInputs = desktop.getVisualInputs();
+    player.updateVisuals(visualInputs.left, visualInputs.right, visualInputs.aimOrigin, visualInputs.aimDirection);
+  }
   renderer.render(scene, camera);
 });
 

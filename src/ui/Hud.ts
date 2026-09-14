@@ -47,7 +47,7 @@ export class Hud {
     this.root.innerHTML = `<div class="stats"><span class="brand">SLING<span>VR</span></span><span>${speed.toFixed(0)} km/h</span><span>${player.position.y.toFixed(0)} m ALT</span><span class="state">${state}</span><span>STYLE ${tricks.style}</span>${tricks.lastTrick ? `<b>${tricks.lastTrick}</b>` : ''}<span>${this.fps} FPS</span></div>`;
     this.root.append(this.help, this.debug);
     if (!this.debug.classList.contains('hidden')) {
-      this.debug.textContent = `L ${left.restLength.toFixed(1)}m / ${left.tension.toFixed(0)}N · R ${right.restLength.toFixed(1)}m / ${right.tension.toFixed(0)}N\n${zip.active ? 'ZIP TARGET LOCKED' : ''} ${wallRun.active ? 'WALL RUN' : ''}`;
+      this.debug.textContent = `L ${left.restLength.toFixed(1)}m / ${left.tension.toFixed(0)}N · R ${right.restLength.toFixed(1)}m / ${right.tension.toFixed(0)}N\n${zip.active ? 'ZIP TARGET LOCKED' : ''} ${wallRun.active ? `WALL RUN ${player.wallNormal.x.toFixed(1)},${player.wallNormal.z.toFixed(1)}` : ''}`;
     }
   }
 

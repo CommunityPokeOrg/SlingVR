@@ -14,6 +14,11 @@ export interface RayHit {
 
 const tMin = new THREE.Vector3();
 const tMax = new THREE.Vector3();
+const nearestWallResult = {
+  distance: 0,
+  normal: new THREE.Vector3(),
+  point: new THREE.Vector3(),
+};
 
 export function raycastAABBs(
   origin: THREE.Vector3,
@@ -73,19 +78,41 @@ export function nearestWall(
   boxes: AABB[],
   maxDistance: number,
 ): { distance: number; normal: THREE.Vector3; point: THREE.Vector3 } | null {
-  let closest: { distance: number; normal: THREE.Vector3; point: THREE.Vector3 } | null = null;
+  let closestDistance = maxDistance;
+  let found = false;
   for (const box of boxes) {
     const insideY = position.y >= box.min.y && position.y <= box.max.y;
     if (!insideY) continue;
-    const candidates = [
-      { distance: Math.abs(position.x - box.min.x), normal: new THREE.Vector3(-1, 0, 0), point: new THREE.Vector3(box.min.x, position.y, position.z) },
-      { distance: Math.abs(position.x - box.max.x), normal: new THREE.Vector3(1, 0, 0), point: new THREE.Vector3(box.max.x, position.y, position.z) },
-      { distance: Math.abs(position.z - box.min.z), normal: new THREE.Vector3(0, 0, -1), point: new THREE.Vector3(position.x, position.y, box.min.z) },
-      { distance: Math.abs(position.z - box.max.z), normal: new THREE.Vector3(0, 0, 1), point: new THREE.Vector3(position.x, position.y, box.max.z) },
-    ];
-    for (const candidate of candidates) {
-      if (candidate.distance <= maxDistance && (!closest || candidate.distance < closest.distance)) closest = candidate;
+    const minXDistance = Math.abs(position.x - box.min.x);
+    if (minXDistance < closestDistance) {
+      closestDistance = minXDistance;
+      nearestWallResult.normal.set(-1, 0, 0);
+      nearestWallResult.point.set(box.min.x, position.y, position.z);
+      found = true;
+    }
+    const maxXDistance = Math.abs(position.x - box.max.x);
+    if (maxXDistance < closestDistance) {
+      closestDistance = maxXDistance;
+      nearestWallResult.normal.set(1, 0, 0);
+      nearestWallResult.point.set(box.max.x, position.y, position.z);
+      found = true;
+    }
+    const minZDistance = Math.abs(position.z - box.min.z);
+    if (minZDistance < closestDistance) {
+      closestDistance = minZDistance;
+      nearestWallResult.normal.set(0, 0, -1);
+      nearestWallResult.point.set(position.x, position.y, box.min.z);
+      found = true;
+    }
+    const maxZDistance = Math.abs(position.z - box.max.z);
+    if (maxZDistance < closestDistance) {
+      closestDistance = maxZDistance;
+      nearestWallResult.normal.set(0, 0, 1);
+      nearestWallResult.point.set(position.x, position.y, box.max.z);
+      found = true;
     }
   }
-  return closest;
+  if (!found) return null;
+  nearestWallResult.distance = closestDistance;
+  return nearestWallResult;
 }

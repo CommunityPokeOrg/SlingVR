@@ -11,6 +11,10 @@ export class Web {
   attached = false;
   tension = 0;
   private hasBend = false;
+  private readonly offset = new THREE.Vector3();
+  private readonly radial = new THREE.Vector3();
+  private readonly tangent = new THREE.Vector3();
+  private readonly ray = new THREE.Vector3();
 
   attach(anchor: THREE.Vector3, player: PlayerBody): void {
     this.anchor.copy(anchor);
@@ -34,34 +38,34 @@ export class Web {
     if (!this.attached) return;
     if (reel) this.restLength = Math.max(2, this.restLength - GAME.ropeReelSpeed * dt);
     const ropeTarget = this.hasBend ? this.bend : this.anchor;
-    const offset = player.position.clone().sub(ropeTarget);
-    const distance = offset.length();
+    this.offset.copy(player.position).sub(ropeTarget);
+    const distance = this.offset.length();
     if (distance <= this.restLength) {
       this.tension = 0;
       return;
     }
-    const radial = offset.normalize();
+    this.radial.copy(this.offset).normalize();
     const stretch = distance - this.restLength;
     this.tension = stretch * GAME.ropeStiffness;
-    player.position.copy(ropeTarget).addScaledVector(radial, this.restLength);
-    const outwardSpeed = player.velocity.dot(radial);
-    if (outwardSpeed > 0) player.velocity.addScaledVector(radial, -outwardSpeed);
-    player.velocity.addScaledVector(radial, (this.tension / GAME.playerMass) * dt);
-    const tangent = player.velocity.clone().addScaledVector(radial, -player.velocity.dot(radial));
-    if (tangent.lengthSq() > 0.1) player.velocity.addScaledVector(tangent.normalize(), GAME.swingBoost * dt);
+    player.position.copy(ropeTarget).addScaledVector(this.radial, this.restLength);
+    const outwardSpeed = player.velocity.dot(this.radial);
+    if (outwardSpeed > 0) player.velocity.addScaledVector(this.radial, -outwardSpeed);
+    player.velocity.addScaledVector(this.radial, (this.tension / GAME.playerMass) * dt);
+    this.tangent.copy(player.velocity).addScaledVector(this.radial, -player.velocity.dot(this.radial));
+    if (this.tangent.lengthSq() > 0.1) player.velocity.addScaledVector(this.tangent.normalize(), GAME.swingBoost * dt);
 
     if (!this.hasBend) {
-      const ray = player.position.clone().sub(this.anchor);
-      const distanceToAnchor = ray.length();
+      this.ray.copy(player.position).sub(this.anchor);
+      const distanceToAnchor = this.ray.length();
       if (distanceToAnchor > 1) {
-        ray.normalize();
+        this.ray.normalize();
         let closestHit: { point: THREE.Vector3; distance: number } | null = null;
         for (const box of buildings) {
-          const hit = raycastAABB(this.anchor, ray, box, distanceToAnchor - 0.5);
+          const hit = raycastAABB(this.anchor, this.ray, box, distanceToAnchor - 0.5);
           if (hit && (!closestHit || hit.distance < closestHit.distance)) closestHit = hit;
         }
         if (closestHit) {
-          this.bend.copy(closestHit.point).addScaledVector(ray, -0.15);
+          this.bend.copy(closestHit.point).addScaledVector(this.ray, -0.15);
           this.hasBend = true;
         }
       }
