@@ -27,7 +27,7 @@ export class CityGenerator {
     const blockSize = 40;
     const street = 14;
     const total = blockCount * blockSize;
-    const buildingCount = blockCount * blockCount * 2;
+    const buildingCount = blockCount * blockCount * 4;
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     const palette = ['#38506a', '#526b86', '#725d70', '#3b6270', '#5d6678'];
     this.buildingMesh = new THREE.InstancedMesh(
