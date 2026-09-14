@@ -16,14 +16,6 @@ export interface ZipTarget {
   ledge?: Ledge;
 }
 
-export function zipSpeedForCharge(charge: number): number {
-  return THREE.MathUtils.lerp(GAME.zipMinSpeed, GAME.zipMaxSpeed, THREE.MathUtils.clamp(charge, 0, 1));
-}
-
-export function webZipImpulseForCharge(charge: number): number {
-  return THREE.MathUtils.lerp(GAME.webZipMinImpulse, GAME.webZipMaxImpulse, THREE.MathUtils.clamp(charge, 0, 1));
-}
-
 export function pullCharge(pressHand: THREE.Vector3, hand: THREE.Vector3, dirToTarget: THREE.Vector3): number {
   return THREE.MathUtils.clamp(pressHand.clone().sub(hand).dot(dirToTarget), 0, GAME.zipPullDistance) / GAME.zipPullDistance;
 }
@@ -45,24 +37,6 @@ export function findPerch(origin: THREE.Vector3, direction: THREE.Vector3, perch
     }
   }
   return best ? { point: best, normal: null, kind: 'perch', distance: bestDistance } : null;
-}
-
-/**
- * Web zip: one line to a surface, then an impulse toward it. Works grounded or airborne.
- * Keeps existing momentum along the pull, but caps the resulting speed so chained zips stay controllable.
- */
-export function applyWebZip(player: PlayerBody, target: THREE.Vector3, impulse: number, direction = new THREE.Vector3()): void {
-  direction.copy(target).sub(player.position);
-  if (direction.lengthSq() < 1e-6) return;
-  direction.normalize();
-  const along = player.velocity.dot(direction);
-  if (along < 0) player.velocity.addScaledVector(direction, -along);
-  const add = Math.min(impulse, Math.max(0, GAME.webZipMaxSpeed - Math.max(0, along)));
-  player.velocity.addScaledVector(direction, add);
-  if (player.grounded) {
-    player.velocity.y = Math.max(player.velocity.y, GAME.webZipLift);
-    player.grounded = false;
-  }
 }
 
 export class Zip {

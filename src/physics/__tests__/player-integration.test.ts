@@ -52,10 +52,19 @@ describe('shared traversal actions', () => {
     const player = makePlayer();
     const input = frame(player);
     player.shootWeb('left', input.head, new THREE.Vector3(0, 0, -1));
+    expect(player.leftWeb.shot.flying).toBe(true);
+    expect(player.leftWeb.attached).toBe(false);
+    for (let i = 0; i < 120 && player.leftWeb.shot.flying; i += 1) player.stepPhysics(GAME.fixedStep, input);
     expect(player.leftWeb.attached).toBe(true);
+    const velocity = player.body.velocity.clone();
     expect(player.zipToward(input.head, new THREE.Vector3(0, 0, -1))).toBe(true);
     expect(player.leftWeb.attached).toBe(false);
-    expect(player.body.velocity.z).toBeLessThan(-27);
+    expect(player.leftWeb.shot.flying).toBe(false);
+    expect(player.body.velocity.equals(velocity)).toBe(true);
+    for (let i = 0; i < 120 && player.webZip.shot.flying; i += 1) player.stepPhysics(GAME.fixedStep, input);
+    for (let i = 0; i < 12; i += 1) player.stepPhysics(GAME.fixedStep, input);
+    expect(player.webZip.pulling).toBe(true);
+    expect(player.body.velocity.z).toBeLessThan(-8);
   });
 
   it('keeps wall contact through web, zip, dash, and steering actions until jump', () => {
@@ -71,7 +80,7 @@ describe('shared traversal actions', () => {
     expect(player.zipToward(input.head, direction)).toBe(false);
     expect(player.dash(direction)).toBe(false);
     input.steer.set(0, 0, 1);
-    for (let i = 0; i < 120; i += 1) player.stepPhysics(GAME.fixedStep, input);
+    for (let i = 0; i < 30; i += 1) player.stepPhysics(GAME.fixedStep, input);
     expect(player.body.position.z).toBe(-10 + GAME.playerRadius);
     player.jumpOrRelease();
     expect(player.wallRun.active).toBe(false);
@@ -106,7 +115,13 @@ describe('Spectacular gestures', () => {
     expect(player.zipToward(input.rightHand, ledge.clone().sub(input.rightHand).normalize(), input.rightHand, 'right', true, input.head)).toBe(true);
     player.releaseZip('right');
     expect(player.zip.active).toBe(false);
-    expect(player.body.velocity.length()).toBeGreaterThan(0);
+    expect(player.webZip.active).toBe(true);
+    expect(player.webZip.shot.flying).toBe(true);
+    expect(player.body.velocity.lengthSq()).toBe(0);
+    for (let i = 0; i < 120 && player.webZip.shot.flying; i += 1) player.stepPhysics(GAME.fixedStep, input);
+    player.stepPhysics(GAME.fixedStep, input);
+    expect(player.webZip.pulling).toBe(true);
+    expect(player.body.velocity.z).toBeLessThan(0);
   });
 
   it('does not charge from whole-body translation, and ignores the other grip release', () => {
@@ -120,8 +135,18 @@ describe('Spectacular gestures', () => {
     player.body.velocity.set(0, 0, 0);
     player.releaseZip('left');
     expect(player.body.velocity.length()).toBe(0);
+    for (let i = 0; i < 120 && player.webZip.shot.flying; i += 1) player.stepPhysics(GAME.fixedStep, input);
+    player.stepPhysics(GAME.fixedStep, input);
+    expect(player.webZip.pulling).toBe(false);
+    expect(player.webZip.force.lengthSq()).toBe(0);
+    const direction = player.webZip.shot.target.clone().sub(player.body.position).normalize();
+    player.body.velocity.copy(direction).multiplyScalar(GAME.webZipMinSpeed);
+    const before = player.body.velocity.clone();
     player.releaseZip('right');
-    expect(player.body.velocity.length()).toBeCloseTo(GAME.webZipMinImpulse);
+    expect(player.body.velocity.equals(before)).toBe(true);
+    player.stepPhysics(GAME.fixedStep, input);
+    expect(player.webZip.pulling).toBe(true);
+    expect(player.webZip.force.length()).toBeLessThan(1e-6);
   });
 
   it('does not reel on the first sample or charge after cancellation', () => {
@@ -129,6 +154,9 @@ describe('Spectacular gestures', () => {
     const input = frame(player);
     input.leftHand.copy(input.head).add(new THREE.Vector3(-0.3, 0, 0.5));
     player.shootWeb('left', input.leftHand, new THREE.Vector3(0, 0, -1));
+    for (let i = 0; i < 120 && player.leftWeb.shot.flying; i += 1) player.stepPhysics(GAME.fixedStep, input);
+    expect(player.leftWeb.attached).toBe(true);
+    expect(player.leftWeb.reelSpeed).toBe(0);
     const length = player.leftWeb.restLength;
     player.stepPhysics(GAME.fixedStep, input);
     expect(player.leftWeb.restLength).toBe(length);
@@ -137,6 +165,8 @@ describe('Spectacular gestures', () => {
     player.body.velocity.set(0, 0, 0);
     player.releaseZip('right');
     expect(player.body.velocity.length()).toBe(0);
+    expect(player.webZip.active).toBe(false);
+    expect(player.webZip.shot.flying).toBe(false);
   });
 
   it('reels only from relative hand movement, even when locomotion changes the rope direction', () => {
@@ -144,7 +174,8 @@ describe('Spectacular gestures', () => {
     const input = frame(player);
     input.leftHand.copy(input.head).add(new THREE.Vector3(0, 0, -0.5));
     player.shootWeb('left', input.leftHand, new THREE.Vector3(0, 0, -1));
-    player.stepPhysics(GAME.fixedStep, input);
+    for (let i = 0; i < 120 && player.leftWeb.shot.flying; i += 1) player.stepPhysics(GAME.fixedStep, input);
+    expect(player.leftWeb.attached).toBe(true);
     const length = player.leftWeb.restLength;
     input.head.x += 5;
     input.leftHand.x += 5;
@@ -152,6 +183,8 @@ describe('Spectacular gestures', () => {
     expect(player.leftWeb.restLength).toBeCloseTo(length);
     input.leftHand.z += 0.2;
     player.stepPhysics(GAME.fixedStep, input);
+    expect(player.leftWeb.restLength).toBeGreaterThan(length - 0.01);
+    for (let i = 0; i < 60; i += 1) player.stepPhysics(GAME.fixedStep, input);
     expect(player.leftWeb.restLength).toBeLessThan(length - 0.2);
   });
 });
